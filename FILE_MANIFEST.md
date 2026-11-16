@@ -1,0 +1,141 @@
+# File-by-file manifest
+
+This manifest lists the files shipped in the public source release. Generated outputs, benchmark datasets, and local credentials are excluded.
+
+- `.env.llm.example` - Example environment-variable names for optional LLM endpoints; contains no secret key.
+- `.gitignore` - Excludes local secrets, caches, generated results, and build outputs from Git.
+- `configs/default.yaml` - Default fuzzer time budget, population, sequence, and generator settings.
+- `configs/vulnerability_taxonomy_5class.yaml` - Five-class vulnerability taxonomy and mapping to logic-oracle families.
+- `docs/figure_software_references.md` - Reference used for the paper figure design.
+- `examples/sample_path_plan.json` - Small example of a contract path hypothesis input.
+- `FILE_MANIFEST.md` - This file-by-file inventory of the public release.
+- `forge_compile_support.py` - Solidity/Foundry source compilation and dependency-resolution support.
+- `fuzzer/agent/__init__.py` - Agent planning, runtime evidence, or target-focus support.
+- `fuzzer/agent/agent_feedback.py` - Builds evidence feedback for path planning.
+- `fuzzer/agent/agent_planner.py` - Builds optional LLM-assisted vulnerability path plans.
+- `fuzzer/agent/llm_provider.py` - Configures optional LLM API requests using runtime settings.
+- `fuzzer/agent/target_focus_agent_runtime.py` - Evidence-facing target-focus runtime for the public release.
+- `fuzzer/agent/target_focus_candidate_buffer.py` - Agent planning, runtime evidence, or target-focus support.
+- `fuzzer/agent/target_focus_candidate_gap.py` - Agent planning, runtime evidence, or target-focus support.
+- `fuzzer/agent/target_focus_runtime.py` - Agent planning, runtime evidence, or target-focus support.
+- `fuzzer/dependencies/mocks/AntiBotMock.sol` - Solidity mock dependency used by supported compilation and execution paths.
+- `fuzzer/dependencies/mocks/DefiProxyMock.sol` - Solidity mock dependency used by supported compilation and execution paths.
+- `fuzzer/dependencies/mocks/DexMocks.sol` - Solidity mock dependency used by supported compilation and execution paths.
+- `fuzzer/dependencies/mocks/ERC20Mock.sol` - Solidity mock dependency used by supported compilation and execution paths.
+- `fuzzer/dependencies/mocks/PresaleMock.sol` - Solidity mock dependency used by supported compilation and execution paths.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/access/Ownable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/security/ReentrancyGuard.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/token/ERC20/ERC20.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/token/ERC20/IERC20.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/utils/Address.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/utils/math/SafeMath.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts/utils/structs/EnumerableSet.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/interfaces/IERC4906Upgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20CappedUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721MetadataUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/introspection/IERC165Upgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/math/SignedMathUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSet.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@solarity/solidity-lib/libs/arrays/Paginator.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/@solarity/solidity-lib/libs/arrays/SetHelper.sol` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/dependencies/vendor/local/README.md` - Vendored third-party Solidity source; upstream license headers are retained.
+- `fuzzer/detectors/__init__.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/arbitrary_memory_access.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/assertion_failure.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/block_dependency.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/integer_overflow.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/leaking_ether.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/locking_ether.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/reentrancy.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/transaction_order_dependency.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/unchecked_return_value.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/unprotected_selfdestruct.py` - EVM vulnerability detector component.
+- `fuzzer/detectors/unsafe_delegatecall.py` - EVM vulnerability detector component.
+- `fuzzer/engine/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/analysis/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/analysis/execution_trace_analysis.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/analysis/symbolic_taint_analysis.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/components/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/components/generator.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/components/individual.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/components/population.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/engine.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/environment/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/fitness/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/operators/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/operators/crossover/crossover.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/operators/crossover/data_dependency_crossover.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/operators/mutation/mutation.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/operators/selection/data_dependency_linear_ranking_selection.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/operators/selection/linear_ranking_selection.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/plugin_interfaces/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/plugin_interfaces/analysis.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/plugin_interfaces/metaclasses.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/plugin_interfaces/operators/__init__.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/plugin_interfaces/operators/crossover.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/plugin_interfaces/operators/mutation.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/engine/plugin_interfaces/operators/selection.py` - Evolutionary fuzzing engine, EVM execution, population, operators, or trace analysis component.
+- `fuzzer/evm/1150000.block` - Serialized EVM block-environment fixture.
+- `fuzzer/evm/4370000.block` - Serialized EVM block-environment fixture.
+- `fuzzer/evm/7280000.block` - Serialized EVM block-environment fixture.
+- `fuzzer/evm/__init__.py` - EVM execution or storage-emulation support.
+- `fuzzer/evm/storage_emulation.py` - EVM execution or storage-emulation support.
+- `fuzzer/guidance/__init__.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/candidate_lifecycle.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/checkpoint_guidance.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/dependency_grounded_scope.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/gei_side_path.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/guided_sequence.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/guided_sequence_concretizer.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/path_plan.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/path_progress.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/side_path_plan_exporter.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/soft_guidance.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/guidance/state_obligation.py` - Path planning, checkpoint guidance, side-path guidance, or progress-tracking component.
+- `fuzzer/main.py` - Command-line entry point for compilation, fuzzing, guidance, and result generation.
+- `fuzzer/metrics/__init__.py` - Python package for path metric implementations.
+- `fuzzer/metrics/path_metrics.py` - Calculates article-aligned VSPC and VPPR metrics.
+- `fuzzer/metrics/test_path_metrics.py` - Paper-aligned path metric tests.
+- `fuzzer/oracles/__init__.py` - Builds, loads, or evaluates logic-vulnerability confirmation oracle data.
+- `fuzzer/oracles/build_catalog.py` - Builds, loads, or evaluates logic-vulnerability confirmation oracle data.
+- `fuzzer/oracles/catalog.py` - Builds, loads, or evaluates logic-vulnerability confirmation oracle data.
+- `fuzzer/oracles/evaluate.py` - Builds, loads, or evaluates logic-vulnerability confirmation oracle data.
+- `fuzzer/oracles/families.py` - Defines the thirteen logic-oracle families.
+- `fuzzer/oracles/runtime.py` - Builds, loads, or evaluates logic-vulnerability confirmation oracle data.
+- `fuzzer/oracles/test_logic_oracle.py` - Logic-oracle tests.
+- `fuzzer/oracles/writeback_sources.py` - Builds, loads, or evaluates logic-vulnerability confirmation oracle data.
+- `fuzzer/runtime/__init__.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/evidence_pool.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/ksi_runtime.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/local_execution_timing.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/phase_cost.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/rq1_phase.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/runtime_timing.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/stage_runtime.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/runtime/timer_metrics.py` - Runtime evidence, timing, phase-cost, or result-summary component.
+- `fuzzer/utils/control_flow_graph.py` - Fuzzer utility for settings, source maps, transaction sequences, or CFG output.
+- `fuzzer/utils/settings.py` - Fuzzer utility for settings, source maps, transaction sequences, or CFG output.
+- `fuzzer/utils/source_map.py` - Fuzzer utility for settings, source maps, transaction sequences, or CFG output.
+- `fuzzer/utils/transaction_seq_utils.py` - Fuzzer utility for settings, source maps, transaction sequences, or CFG output.
+- `fuzzer/utils/utils.py` - Fuzzer utility for settings, source maps, transaction sequences, or CFG output.
+- `NOTICE_CROSSFUZZ_MIT.txt` - Upstream CrossFuzz MIT license notice.
+- `README.md` - Project overview, setup, usage, metrics, oracle, and validation instructions.
+- `requirements.txt` - Python dependencies required by the fuzzer and optional LLM/oracle utilities.

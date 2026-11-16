@@ -1,0 +1,9 @@
+eth-abi
+eth-hash
+eth-utils
+networkx
+pyyaml
+slither-analyzer
+web3
+openai>=1.0,<2.0
+

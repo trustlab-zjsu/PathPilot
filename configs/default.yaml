@@ -1,0 +1,11 @@
+time_budget: 300
+population_size: auto
+max_sequence_length: 5
+crossover_probability: 0.9
+mutation_probability: 0.1
+
+generator:
+  pool_capacity: 10
+  max_array_length: 2
+  enable_boundary_fallback: true
+  enable_failure_remove: true
