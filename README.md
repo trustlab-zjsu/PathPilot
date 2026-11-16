@@ -15,8 +15,9 @@ PathPilot is a research fuzzer for smart-contract logic vulnerabilities. It comb
 - `configs/`: example fuzzer settings and vulnerability taxonomy.
 - `examples/`: a small path-plan example.
 - `docs/`: implementation and figure references.
+- `dataset_contracts/`: contract sources and manifests collected from public benchmark or on-chain sources. The dataset metadata records the source and checksum where available.
 
-Only source, small examples, and required dependency code are included. Benchmark datasets, generated results, local secrets, and machine-specific runtime files are kept outside this release.
+The public contract datasets are included for reproducibility. Generated results, local secrets, compiler caches, and machine-specific runtime files are kept outside this release.
 
 ## Requirements
 
@@ -47,6 +48,8 @@ python -m fuzzer.main `
   --time-budget 60 `
   --out out\contract-run
 ```
+
+`--time-budget` is the maximum wall-clock time for this one fuzzing run, in seconds. The example uses 60 seconds as a short smoke-test budget; choose a longer value for experiments (for example, `600` or `3600`). It is equivalent to `--timeout` and does not change the dataset.
 
 For an ABI and deployed contract, provide the ABI, contract address, and the required chain/RPC settings instead. Run `python -m fuzzer.main --help` for the complete option list.
 
