@@ -18,13 +18,13 @@ class AgentFeedbackBuilder:
         path_plan: PathPlan,
         output_dir: str,
         path_progress_path: Optional[str] = None,
-        ksi_evidence_path: Optional[str] = None,
+        pai_evidence_path: Optional[str] = None,
         side_path_candidates_path: Optional[str] = None,
     ):
         self.path_plan = path_plan or PathPlan()
         self.output_dir = os.path.abspath(output_dir) if output_dir else ""
         self.path_progress_path = path_progress_path or os.path.join(self.output_dir, "path_progress.jsonl")
-        self.ksi_evidence_path = ksi_evidence_path or os.path.join(self.output_dir, "ksi_evidence.jsonl")
+        self.pai_evidence_path = pai_evidence_path or os.path.join(self.output_dir, "pai_evidence.jsonl")
         self.evidence_pool_path = os.path.join(self.output_dir, "evidence_pool.jsonl")
         self.side_path_candidates_path = (
             side_path_candidates_path or os.path.join(self.output_dir, "side_path_candidates.jsonl")
@@ -34,9 +34,9 @@ class AgentFeedbackBuilder:
     def build(self) -> Dict[str, Any]:
         try:
             path_progress_records = self._read_jsonl(self.path_progress_path)
-            ksi_evidence_records = EvidencePool.read(self.evidence_pool_path, "ksi_path_evidence")
-            if not ksi_evidence_records:
-                ksi_evidence_records = self._read_jsonl(self.ksi_evidence_path)
+            pai_evidence_records = EvidencePool.read(self.evidence_pool_path, "pai_path_evidence")
+            if not pai_evidence_records:
+                pai_evidence_records = self._read_jsonl(self.pai_evidence_path)
             side_path_records = self._read_jsonl(self.side_path_candidates_path)
             side_path_shortlist = self._read_json(self.side_path_shortlist_path)
             hypotheses = []
@@ -51,13 +51,13 @@ class AgentFeedbackBuilder:
                     for record in path_progress_records
                     if record.get("matched_hypothesis") == hypothesis.id
                 ]
-                ksi_records = [
+                pai_records = [
                     record
-                    for record in ksi_evidence_records
+                    for record in pai_evidence_records
                     if record.get("hypothesis_id") == hypothesis.id
                 ]
                 progress_summary = self._build_progress_summary(hypothesis, progress_records)
-                runtime_evidence = self._build_runtime_evidence(ksi_records)
+                runtime_evidence = self._build_runtime_evidence(pai_records)
                 sink_reached_total += progress_summary["sink_reached_count"]
                 sink_function_reached_total += progress_summary["sink_function_reached_count"]
                 sink_reverted_total += progress_summary["sink_reverted_count"]
@@ -83,11 +83,11 @@ class AgentFeedbackBuilder:
 
             return {
                 "hypotheses": hypotheses,
-                "side_observations": self._build_side_observations(ksi_evidence_records),
+                "side_observations": self._build_side_observations(pai_evidence_records),
                 "global_summary": {
                     "hypothesis_count": len(self.path_plan.hypotheses),
                     "total_path_progress_records": len(path_progress_records),
-                    "total_ksi_evidence_records": len(ksi_evidence_records),
+                    "total_pai_evidence_records": len(pai_evidence_records),
                     "sink_reached_total": sink_reached_total,
                     "sink_function_reached_total": sink_function_reached_total,
                     "sink_reverted_total": sink_reverted_total,
@@ -105,7 +105,7 @@ class AgentFeedbackBuilder:
                 "global_summary": {
                     "hypothesis_count": 0,
                     "total_path_progress_records": 0,
-                    "total_ksi_evidence_records": 0,
+                    "total_pai_evidence_records": 0,
                     "sink_reached_total": 0,
                     "sink_function_reached_total": 0,
                     "sink_reverted_total": 0,
@@ -399,19 +399,19 @@ class AgentFeedbackBuilder:
             )
         if runtime_evidence.get("revert_count", 0) > 0:
             evidence.append(
-                "KSI observed revert before or around the next frontier in {} executions.".format(
+                "PAI observed revert before or around the next frontier in {} executions.".format(
                     runtime_evidence["revert_count"]
                 )
             )
         if runtime_evidence.get("sender_change_count", 0) > 0:
             evidence.append(
-                "KSI observed sender changes in {} executions.".format(
+                "PAI observed sender changes in {} executions.".format(
                     runtime_evidence["sender_change_count"]
                 )
             )
         if runtime_evidence.get("sink_observed_without_valid_prefix_count", 0) > 0:
             evidence.append(
-                "KSI observed sink-like calls without a validated prefix in {} executions.".format(
+                "PAI observed sink-like calls without a validated prefix in {} executions.".format(
                     runtime_evidence["sink_observed_without_valid_prefix_count"]
                 )
             )

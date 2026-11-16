@@ -34,7 +34,7 @@ def _safe_token(value: Any) -> str:
     return sanitized or "NONE"
 
 
-class TFICandidateGapRepair:
+class TCICandidateGapRepair:
     def __init__(
         self,
         abi: Optional[Any] = None,
@@ -107,7 +107,7 @@ class TFICandidateGapRepair:
         sink = _text(gap_event.get("sink")).strip()
         scope_id = _text(gap_event.get("scope_id")).strip()
         hypothesis_id = _text(gap_event.get("hypothesis_id")).strip()
-        gap_event_id = _text(gap_event.get("gap_event_id")).strip() or "TFI_GAP_EVT_{}_{}".format(
+        gap_event_id = _text(gap_event.get("gap_event_id")).strip() or "TCI_GAP_EVT_{}_{}".format(
             _safe_token(scope_id),
             _safe_token(hypothesis_id),
         )
@@ -122,7 +122,7 @@ class TFICandidateGapRepair:
         for variant_index, (sequence, source_used) in enumerate(unique_sequences[: self.max_candidates_per_gap], start=1):
             if not sequence:
                 continue
-            candidate_id = "TFI_GAP_CAND_{:04d}_{}_{}_V{:02d}".format(
+            candidate_id = "TCI_GAP_CAND_{:04d}_{}_{}_V{:02d}".format(
                 variant_index,
                 _safe_token(scope_id),
                 _safe_token(gap_event_id),
@@ -131,9 +131,9 @@ class TFICandidateGapRepair:
             binding_hints = guidance_payload.get("binding_hints") if isinstance(guidance_payload.get("binding_hints"), dict) else {}
             candidate = {
                 "candidate_id": candidate_id,
-                "candidate_type": "tfi_guided_candidate_gap_repair",
-                "candidate_origin": "tfi_guided_candidate_gap_repair",
-                "generated_under_tfi_constraint": True,
+                "candidate_type": "tci_guided_candidate_gap_repair",
+                "candidate_origin": "tci_guided_candidate_gap_repair",
+                "generated_under_tci_constraint": True,
                 "candidate_source": "fuzzer_existing_pool_generation",
                 "candidate_source_used": source_used,
                 "source_task_id": gap_event_id,
@@ -169,7 +169,7 @@ class TFICandidateGapRepair:
                     "agent_guided": bool(isinstance(guidance_payload, dict) and _text(guidance_payload.get("source")).strip() == "agent_guidance"),
                     "uses_existing_pool": True,
                     "new_pool_created": False,
-                    "candidate_origin": "tfi_guided_candidate_gap_repair",
+                    "candidate_origin": "tci_guided_candidate_gap_repair",
                     "scope_id": scope_id,
                     "target_function": target_function,
                     "frontier": frontier,
@@ -178,7 +178,7 @@ class TFICandidateGapRepair:
                     "guidance_type": _text(guidance_payload.get("guidance_type")).strip() or "candidate_gap_repair_guidance",
                 },
                 "candidate_gap_guidance": guidance_payload,
-                "reason": "tfi_guided_candidate_gap_repair_from_local_candidate_gap",
+                "reason": "tci_guided_candidate_gap_repair_from_local_candidate_gap",
             }
             candidates.append(candidate)
         return candidates

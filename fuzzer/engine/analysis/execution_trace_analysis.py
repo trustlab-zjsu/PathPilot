@@ -169,7 +169,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
         return bool(budget_exhausted(self.env, fallback_timeout=settings.GLOBAL_TIMEOUT))
 
     def _repair_timeout_grace_state(self):
-        tracker = getattr(self.env, "target_focus_soft_injection_analysis", None)
+        tracker = getattr(self.env, "target_condition_soft_injection_analysis", None)
         runtime_getter = getattr(tracker, "_repair_runtime", None) if tracker is not None else None
         runtime = runtime_getter() if callable(runtime_getter) else None
         if runtime is None:
@@ -296,12 +296,12 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
             try:
                 gei_summary = gei_recorder.get_summary()
                 self.logger.info(
-                    "[GEI_CORE] round=%s enabled=%s observation_count=%s side_path_candidate_count=%s ksi_enrichment_used=%s reason=%s",
+                    "[GEI_CORE] round=%s enabled=%s observation_count=%s side_path_candidate_count=%s pai_enrichment_used=%s reason=%s",
                     g + 1,
                     int(bool(gei_summary.get("enabled", False))),
                     int(gei_summary.get("observation_count") or 0),
                     int(gei_summary.get("side_path_candidate_count") or 0),
-                    int(bool(gei_summary.get("ksi_enrichment_used", False))),
+                    int(bool(gei_summary.get("pai_enrichment_used", False))),
                     "active" if gei_summary.get("enabled", False) else "disabled",
                 )
                 self.logger.info(
@@ -681,7 +681,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
             self.logger.warning("Path progress tracking failed: %s", exc)
         return []
 
-    def _record_ksi_evidence(
+    def _record_pai_evidence(
         self,
         sequence_id,
         env,
@@ -690,11 +690,11 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
         progress_records,
         execution_result,
     ):
-        ksi_runtime = getattr(env, "ksi_runtime", None)
-        if ksi_runtime is None or not getattr(ksi_runtime, "enabled", False):
+        pai_runtime = getattr(env, "pai_runtime", None)
+        if pai_runtime is None or not getattr(pai_runtime, "enabled", False):
             return []
         try:
-            return ksi_runtime.record(
+            return pai_runtime.record(
                 sequence_id=sequence_id,
                 function_names=function_names,
                 tx_summaries=tx_summaries,
@@ -702,7 +702,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
                 execution_result=execution_result,
             )
         except Exception as exc:
-            self.logger.warning("KSI evidence tracking failed: %s", exc)
+            self.logger.warning("PAI evidence tracking failed: %s", exc)
         return []
 
     def _build_gei_core_observation(
@@ -760,7 +760,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
             "target_seen": target_seen,
         }
 
-    def _record_gei_side_paths(self, env, gei_observations, ksi_records=None):
+    def _record_gei_side_paths(self, env, gei_observations, pai_records=None):
         recorder = getattr(env, "gei_side_path_recorder", None)
         if recorder is None or not getattr(recorder, "enabled", False):
             return []
@@ -770,14 +770,14 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
                 candidate = recorder.record_from_observation(
                     observation,
                     source=str((observation or {}).get("source") or "gei_core_observation"),
-                    ksi_enrichment_used=False,
+                    pai_enrichment_used=False,
                 )
                 if candidate:
                     records.append(candidate)
-            for ksi_record in ksi_records or []:
-                if not isinstance(ksi_record, dict):
+            for pai_record in pai_records or []:
+                if not isinstance(pai_record, dict):
                     continue
-                candidate = recorder.record_from_ksi(ksi_record)
+                candidate = recorder.record_from_pai(pai_record)
                 if candidate:
                     records.append(candidate)
         except Exception as exc:
@@ -799,7 +799,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
         meta = {
             "candidate_origin": None,
             "candidate_source": "original",
-            "generated_under_tfi_constraint": None,
+            "generated_under_tci_constraint": None,
             "soft_injected_candidate_id": None,
             "parent_candidate_id": None,
             "modules_used": [],
@@ -816,9 +816,9 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
         }
         if hasattr(indv, "repair_candidate_id"):
             meta["soft_injected_candidate_id"] = getattr(indv, "repair_candidate_id", None)
-            meta["candidate_origin"] = "target_focus_soft_injection"
-            meta["candidate_source"] = "tfi"
-            meta["generated_under_tfi_constraint"] = True
+            meta["candidate_origin"] = "target_condition_soft_injection"
+            meta["candidate_source"] = "tci"
+            meta["generated_under_tci_constraint"] = True
         if hasattr(indv, "candidate_metadata"):
             metadata = getattr(indv, "candidate_metadata", {}) or {}
             if isinstance(metadata, dict):
@@ -832,12 +832,12 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
                 source_text = str(origin or "").lower()
                 if "agent" in source_text or "llm" in source_text:
                     meta["candidate_source"] = "agent"
-                elif "ksi" in source_text:
-                    meta["candidate_source"] = "ksi"
+                elif "pai" in source_text:
+                    meta["candidate_source"] = "pai"
                 elif "gei" in source_text:
                     meta["candidate_source"] = "gei"
-                elif "tfi" in source_text:
-                    meta["candidate_source"] = "tfi"
+                elif "tci" in source_text:
+                    meta["candidate_source"] = "tci"
                 modules_used = metadata.get("modules_used")
                 if isinstance(modules_used, list):
                     meta["modules_used"] = list(modules_used)
@@ -854,7 +854,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
                 meta["parent_candidate_id"] = metadata.get("parent_candidate_id")
         if hasattr(indv, "soft_guidance_metadata"):
             meta["candidate_origin"] = meta["candidate_origin"] or "soft_guidance"
-            meta["candidate_source"] = meta["candidate_source"] or "tfi"
+            meta["candidate_source"] = meta["candidate_source"] or "tci"
         return meta
 
     @staticmethod
@@ -890,19 +890,19 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
         indv.data_dependencies = []
         contract_address = None
         path_progress_tracker = getattr(env, "path_progress_tracker", None)
-        ksi_runtime = getattr(env, "ksi_runtime", None)
+        pai_runtime = getattr(env, "pai_runtime", None)
         gei_side_path_recorder = getattr(env, "gei_side_path_recorder", None)
         path_progress_active = bool(getattr(path_progress_tracker, "enabled", False))
-        ksi_active = bool(getattr(ksi_runtime, "enabled", False)) and rq1_phase_allows_feature(env, "ksi")
+        pai_active = bool(getattr(pai_runtime, "enabled", False)) and rq1_phase_allows_feature(env, "pai")
         gei_active = bool(getattr(gei_side_path_recorder, "enabled", False)) and rq1_phase_allows_feature(env, "gei")
-        evidence_active = path_progress_active or ksi_active or gei_active
+        evidence_active = path_progress_active or pai_active or gei_active
         starting_coverage = len(env.code_coverage) if evidence_active else 0
         function_names = []
         tx_summaries = []
         sequence_id = self._extract_sequence_id(indv)
         global_sequence_index = self._next_audit_sequence_index()
         candidate_meta = self._build_candidate_meta(indv)
-        tracker = getattr(env, "target_focus_soft_injection_analysis", None)
+        tracker = getattr(env, "target_condition_soft_injection_analysis", None)
         repair_started_logged = False
         repair_tx_count = len(getattr(indv, "solution", []) or [])
 
@@ -1466,7 +1466,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
                     tx_summaries,
                     execution_result,
                 )
-                ksi_records = self._record_ksi_evidence(
+                pai_records = self._record_pai_evidence(
                     sequence_id,
                     env,
                     function_names,
@@ -1484,7 +1484,7 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
                             execution_result,
                         )
                     )
-                self._record_gei_side_paths(env, gei_observations, ksi_records=ksi_records)
+                self._record_gei_side_paths(env, gei_observations, pai_records=pai_records)
             except Exception as exc:
                 self.logger.warning("Path progress tracking failed: %s", exc)
 
@@ -1829,19 +1829,19 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
             tracker = getattr(self.env, "path_progress_tracker", None)
             if tracker is not None:
                 path_validation_summary = tracker.get_summary()
-                ksi_runtime = getattr(self.env, "ksi_runtime", None)
-                if ksi_runtime is not None:
-                    ksi_summary = ksi_runtime.get_summary()
-                    path_validation_summary["ksi_enabled"] = bool(ksi_summary.get("enabled", False))
-                    path_validation_summary["ksi_evidence_records"] = int(
-                        ksi_summary.get("ksi_evidence_records") or 0
+                pai_runtime = getattr(self.env, "pai_runtime", None)
+                if pai_runtime is not None:
+                    pai_summary = pai_runtime.get_summary()
+                    path_validation_summary["pai_enabled"] = bool(pai_summary.get("enabled", False))
+                    path_validation_summary["pai_evidence_records"] = int(
+                        pai_summary.get("pai_evidence_records") or 0
                     )
-                    path_validation_summary["ksi_evidence_path"] = ksi_summary.get("ksi_evidence_path")
+                    path_validation_summary["pai_evidence_path"] = pai_summary.get("pai_evidence_path")
                 self.env.results["path_validation"] = path_validation_summary
             else:
-                ksi_runtime = getattr(self.env, "ksi_runtime", None)
-                if ksi_runtime is not None:
-                    self.env.results["ksi"] = ksi_runtime.get_summary()
+                pai_runtime = getattr(self.env, "pai_runtime", None)
+                if pai_runtime is not None:
+                    self.env.results["pai"] = pai_runtime.get_summary()
         except Exception as exc:
             self.logger.warning("Path validation summary failed: %s", exc)
 

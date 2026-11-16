@@ -13,7 +13,7 @@ class AgentPlanner:
         self,
         output_dir: str,
         blocker_evidence_path: Optional[str] = None,
-        tfi_focus_path: Optional[str] = None,
+        tci_focus_path: Optional[str] = None,
         side_path_shortlist_path: Optional[str] = None,
         proposed_path_plan_path: Optional[str] = None,
         max_hypotheses: int = 20,
@@ -33,7 +33,7 @@ class AgentPlanner:
         self._requested_blocker_evidence_path = (
             os.path.abspath(blocker_evidence_path) if blocker_evidence_path else None
         )
-        self._requested_tfi_focus_path = os.path.abspath(tfi_focus_path) if tfi_focus_path else None
+        self._requested_tci_focus_path = os.path.abspath(tci_focus_path) if tci_focus_path else None
         self._requested_side_path_shortlist_path = (
             os.path.abspath(side_path_shortlist_path) if side_path_shortlist_path else None
         )
@@ -44,8 +44,8 @@ class AgentPlanner:
         self.default_blocker_evidence_path = (
             os.path.join(self.output_dir, "blocker_evidence.json") if self.output_dir else ""
         )
-        self.default_tfi_focus_path = (
-            os.path.join(self.output_dir, "tfi_focus_targets.jsonl") if self.output_dir else ""
+        self.default_tci_focus_path = (
+            os.path.join(self.output_dir, "tci_focus_targets.jsonl") if self.output_dir else ""
         )
         self.default_side_path_shortlist_path = (
             os.path.join(self.output_dir, "side_path_shortlist.json") if self.output_dir else ""
@@ -62,18 +62,18 @@ class AgentPlanner:
 
         self.loaded_inputs: Dict[str, bool] = {
             "blocker_evidence": False,
-            "tfi_focus": False,
+            "tci_focus": False,
             "side_path_shortlist": False,
             "proposed_path_plan": False,
         }
         self.input_paths: Dict[str, Optional[str]] = {
             "blocker_evidence": self._requested_blocker_evidence_path or self.default_blocker_evidence_path or None,
-            "tfi_focus": self._requested_tfi_focus_path or self.default_tfi_focus_path or None,
+            "tci_focus": self._requested_tci_focus_path or self.default_tci_focus_path or None,
             "side_path_shortlist": self._requested_side_path_shortlist_path or self.default_side_path_shortlist_path or None,
             "proposed_path_plan": self._requested_proposed_path_plan_path or self.default_proposed_path_plan_path or None,
         }
         self.source_counts: Dict[str, int] = {
-            "tfi_focus": 0,
+            "tci_focus": 0,
             "blocker_evidence": 0,
             "side_path_shortlist": 0,
         }
@@ -143,7 +143,7 @@ class AgentPlanner:
                     "summary_path": self.summary_path,
                     "hypothesis_count": 0,
                     "source_counts": {
-                        "tfi_focus": 0,
+                        "tci_focus": 0,
                         "blocker_evidence": 0,
                         "side_path_shortlist": 0,
                     },
@@ -165,10 +165,10 @@ class AgentPlanner:
             self.default_blocker_evidence_path,
             "blocker_evidence",
         )
-        tfi_records = self._load_jsonl_with_fallback(
-            self._requested_tfi_focus_path,
-            self.default_tfi_focus_path,
-            "tfi_focus",
+        tci_records = self._load_jsonl_with_fallback(
+            self._requested_tci_focus_path,
+            self.default_tci_focus_path,
+            "tci_focus",
         )
         shortlist_payload = EvidencePool.gei_shortlist_payload(self.evidence_pool_path)
         if shortlist_payload.get("shortlist"):
@@ -187,14 +187,14 @@ class AgentPlanner:
         )
         return {
             "blocker_payload": blocker_payload,
-            "tfi_records": tfi_records,
+            "tci_records": tci_records,
             "shortlist_payload": shortlist_payload,
             "proposed_payload": proposed_payload,
         }
 
     def _build_plan_deterministic(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         blocker_payload = inputs.get("blocker_payload", {})
-        tfi_records = inputs.get("tfi_records", [])
+        tci_records = inputs.get("tci_records", [])
         shortlist_payload = inputs.get("shortlist_payload", {})
         proposed_payload = inputs.get("proposed_payload", {})
 
@@ -204,20 +204,20 @@ class AgentPlanner:
         selected: Dict[Tuple[str, ...], Dict[str, Any]] = {}
         order_seen = 0
         self.source_counts = {
-            "tfi_focus": 0,
+            "tci_focus": 0,
             "blocker_evidence": 0,
             "side_path_shortlist": 0,
         }
 
-        for record in tfi_records:
+        for record in tci_records:
             if str(record.get("priority") or "").lower() != "high":
                 continue
-            candidate = self._build_from_tfi(record, blocker_hypotheses, proposed_hypotheses)
+            candidate = self._build_from_tci(record, blocker_hypotheses, proposed_hypotheses)
             if candidate:
                 inserted = self._upsert_candidate(selected, candidate, rank=1, order=order_seen)
                 order_seen += 1
                 if inserted:
-                    self.source_counts["tfi_focus"] += 1
+                    self.source_counts["tci_focus"] += 1
 
         for record in blocker_hypotheses.values():
             candidate = self._build_from_blocker(record)
@@ -248,14 +248,14 @@ class AgentPlanner:
         hypotheses = hypotheses[: self.max_hypotheses]
 
         self.source_counts = {
-            "tfi_focus": 0,
+            "tci_focus": 0,
             "blocker_evidence": 0,
             "side_path_shortlist": 0,
         }
         for item in hypotheses:
             rank = int(item.get("_source_rank", 99))
             if rank == 1:
-                self.source_counts["tfi_focus"] += 1
+                self.source_counts["tci_focus"] += 1
             elif rank == 2:
                 self.source_counts["blocker_evidence"] += 1
             elif rank == 3:
@@ -352,7 +352,7 @@ class AgentPlanner:
 
     def _build_llm_prompt(self, inputs: Dict[str, Any]) -> str:
         blocker_payload = inputs.get("blocker_payload", {})
-        tfi_records = list(inputs.get("tfi_records", []) or [])
+        tci_records = list(inputs.get("tci_records", []) or [])
         shortlist_payload = inputs.get("shortlist_payload", {})
         proposed_payload = inputs.get("proposed_payload", {})
 
@@ -360,8 +360,8 @@ class AgentPlanner:
         shortlist = shortlist_payload.get("shortlist") if isinstance(shortlist_payload, dict) else []
         proposed_hypotheses = proposed_payload.get("hypotheses") if isinstance(proposed_payload, dict) else []
 
-        sorted_tfi = sorted(
-            [item for item in tfi_records if isinstance(item, dict)],
+        sorted_tci = sorted(
+            [item for item in tci_records if isinstance(item, dict)],
             key=lambda item: (
                 0 if str(item.get("priority") or "").lower() == "high" else 1,
                 str(item.get("hypothesis_id") or ""),
@@ -390,14 +390,14 @@ class AgentPlanner:
                 }
             )
 
-        compact_tfi = []
-        for item in sorted_tfi[:30]:
+        compact_tci = []
+        for item in sorted_tci[:30]:
             path = self._normalize_path(item.get("path"))
             observed_functions.update(path)
             focus_function = self._text(item.get("focus_function"))
             if focus_function:
                 observed_functions.add(focus_function)
-            compact_tfi.append(
+            compact_tci.append(
                 {
                     "hypothesis_id": self._text(item.get("hypothesis_id")),
                     "focus_type": self._text(item.get("focus_type")),
@@ -447,7 +447,7 @@ class AgentPlanner:
             "max_hypotheses": self.max_hypotheses,
             "observed_functions": sorted(observed_functions),
             "blocker_evidence": compact_blockers,
-            "tfi_focus_targets": compact_tfi,
+            "tci_focus_targets": compact_tci,
             "side_path_shortlist": compact_shortlist,
             "proposed_path_plan": compact_proposed,
         }
@@ -464,7 +464,7 @@ class AgentPlanner:
             "2. path must be a non-empty list of function names.",
             "3. sink should default to the last function in path.",
             "4. priority must be between 0.0 and 1.0.",
-            "5. Prioritize TFI high priority sink_reverted, repeated_frontier_block, caller_or_permission_condition.",
+            "5. Prioritize TCI high priority sink_reverted, repeated_frontier_block, caller_or_permission_condition.",
             "6. Prefer shorter and more executable paths.",
             "7. Only use function names that appear in observed_functions or the evidence payload.",
             "8. Do not invent new function names.",
@@ -557,7 +557,7 @@ class AgentPlanner:
             "summary_path": self.summary_path if self.summary_path else None,
             "hypothesis_count": 0,
             "source_counts": {
-                "tfi_focus": 0,
+                "tci_focus": 0,
                 "blocker_evidence": 0,
                 "side_path_shortlist": 0,
             },
@@ -695,7 +695,7 @@ class AgentPlanner:
                 output[hypothesis_id] = item
         return output
 
-    def _build_from_tfi(
+    def _build_from_tci(
         self,
         target: Dict[str, Any],
         blocker_hypotheses: Dict[str, Dict[str, Any]],
@@ -717,7 +717,7 @@ class AgentPlanner:
         focus_type = self._text(target.get("focus_type"))
         focus_function = self._text(target.get("focus_function"))
         sink = focus_function or self._text(target.get("sink")) or path[-1]
-        reason = self._text(target.get("reason")) or "tfi high priority focus target"
+        reason = self._text(target.get("reason")) or "tci high priority focus target"
 
         expected_blockers = []
         if focus_type == "sink_reverted":

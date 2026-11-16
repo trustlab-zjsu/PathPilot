@@ -232,7 +232,7 @@ class EvolutionaryFuzzingEngine(object):
 
     def _timeout_repair_grace_candidate_ids(self):
         env = getattr(self, "env", None)
-        tracker = getattr(env, "target_focus_soft_injection_analysis", None) if env is not None else None
+        tracker = getattr(env, "target_condition_soft_injection_analysis", None) if env is not None else None
         runtime_getter = getattr(tracker, "_repair_runtime", None)
         runtime = runtime_getter() if callable(runtime_getter) else None
         if runtime is None:
@@ -331,7 +331,7 @@ class EvolutionaryFuzzingEngine(object):
                     if g % a.interval == 0:
                         a.register_step(g=g, population=self.population, engine=self)
                         if self._timeout_reached(execution_begin):
-                            if a.__class__.__name__ == "TFISoftInjectionAnalysis":
+                            if a.__class__.__name__ == "TCISoftInjectionAnalysis":
                                 try:
                                     self._run_timeout_repair_grace(analysis_index, g)
                                 except Exception:

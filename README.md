@@ -1,6 +1,6 @@
 # PathPilot
 
-PathPilot is a research fuzzer for smart-contract logic vulnerabilities. It combines evolutionary transaction-sequence generation with path hypotheses, runtime evidence, GEI/KSI/TFI guidance, optional LLM-assisted planning, and a confirmation oracle.
+PathPilot is a research fuzzer for smart-contract logic vulnerabilities. It combines evolutionary transaction-sequence generation with path hypotheses, runtime evidence, Global Execution Instrumentation (GEI), Path Assessment Instrumentation (PAI), Target Condition Instrumentation (TCI), optional LLM-assisted planning, and a confirmation oracle.
 
 ## Repository Layout
 

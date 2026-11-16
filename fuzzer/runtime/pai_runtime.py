@@ -7,13 +7,13 @@ from typing import Any, Dict, List, Optional
 from fuzzer.runtime.evidence_pool import EvidencePool
 
 
-class KSIRuntime:
+class PAIRuntime:
     def __init__(self, output_dir: str, enabled: bool = False):
         self.output_dir = os.path.abspath(output_dir) if output_dir else ""
-        self.output_path = os.path.join(self.output_dir, "ksi_evidence.jsonl") if self.output_dir else ""
+        self.output_path = os.path.join(self.output_dir, "pai_evidence.jsonl") if self.output_dir else ""
         self.evidence_pool = EvidencePool(self.output_dir)
         self.enabled = bool(enabled and self.output_path)
-        self.ksi_evidence_records = 0
+        self.pai_evidence_records = 0
 
         if self.enabled:
             try:
@@ -81,8 +81,8 @@ class KSIRuntime:
                 )
 
             self._append_records(records)
-            self.evidence_pool.append_many("ksi_path_evidence", records)
-            self.ksi_evidence_records += len(records)
+            self.evidence_pool.append_many("pai_path_evidence", records)
+            self.pai_evidence_records += len(records)
             return records
         except Exception:
             return []
@@ -90,8 +90,8 @@ class KSIRuntime:
     def get_summary(self) -> Dict[str, Any]:
         return {
             "enabled": bool(self.enabled),
-            "ksi_evidence_records": int(self.ksi_evidence_records),
-            "ksi_evidence_path": self.output_path if self.output_path else None,
+            "pai_evidence_records": int(self.pai_evidence_records),
+            "pai_evidence_path": self.output_path if self.output_path else None,
             "evidence_pool_path": self.evidence_pool.path if self.evidence_pool.path else None,
         }
 

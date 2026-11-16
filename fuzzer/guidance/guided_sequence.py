@@ -230,8 +230,8 @@ class RepairDiagnosisBuilder:
         self,
         output_dir: str,
         blocker_evidence_path: Optional[str] = None,
-        ksi_evidence_path: Optional[str] = None,
-        tfi_focus_path: Optional[str] = None,
+        pai_evidence_path: Optional[str] = None,
+        tci_focus_path: Optional[str] = None,
         agent_path_plan_path: Optional[str] = None,
         max_recent_sequences: int = 20,
     ):
@@ -241,18 +241,18 @@ class RepairDiagnosisBuilder:
         self._requested_blocker_evidence_path = (
             os.path.abspath(blocker_evidence_path) if blocker_evidence_path else None
         )
-        self._requested_ksi_evidence_path = os.path.abspath(ksi_evidence_path) if ksi_evidence_path else None
-        self._requested_tfi_focus_path = os.path.abspath(tfi_focus_path) if tfi_focus_path else None
+        self._requested_pai_evidence_path = os.path.abspath(pai_evidence_path) if pai_evidence_path else None
+        self._requested_tci_focus_path = os.path.abspath(tci_focus_path) if tci_focus_path else None
         self._requested_path_plan_path = os.path.abspath(agent_path_plan_path) if agent_path_plan_path else None
 
         self.default_blocker_evidence_path = (
             os.path.join(self.output_dir, "blocker_evidence.json") if self.output_dir else ""
         )
-        self.default_ksi_evidence_path = (
-            os.path.join(self.output_dir, "ksi_evidence.jsonl") if self.output_dir else ""
+        self.default_pai_evidence_path = (
+            os.path.join(self.output_dir, "pai_evidence.jsonl") if self.output_dir else ""
         )
-        self.default_tfi_focus_path = (
-            os.path.join(self.output_dir, "tfi_focus_targets.jsonl") if self.output_dir else ""
+        self.default_tci_focus_path = (
+            os.path.join(self.output_dir, "tci_focus_targets.jsonl") if self.output_dir else ""
         )
         self.default_agent_path_plan_path = (
             os.path.join(self.output_dir, "agent_path_plan.json") if self.output_dir else ""
@@ -263,14 +263,14 @@ class RepairDiagnosisBuilder:
 
         self.loaded_inputs: Dict[str, bool] = {
             "blocker_evidence": False,
-            "ksi_evidence": False,
-            "tfi_focus": False,
+            "pai_evidence": False,
+            "tci_focus": False,
             "path_plan": False,
         }
         self.input_paths: Dict[str, Optional[str]] = {
             "blocker_evidence": self._requested_blocker_evidence_path or self.default_blocker_evidence_path or None,
-            "ksi_evidence": self._requested_ksi_evidence_path or self.default_ksi_evidence_path or None,
-            "tfi_focus": self._requested_tfi_focus_path or self.default_tfi_focus_path or None,
+            "pai_evidence": self._requested_pai_evidence_path or self.default_pai_evidence_path or None,
+            "tci_focus": self._requested_tci_focus_path or self.default_tci_focus_path or None,
             "path_plan": self._requested_path_plan_path or self.default_agent_path_plan_path or None,
         }
 
@@ -280,15 +280,15 @@ class RepairDiagnosisBuilder:
             self.default_blocker_evidence_path,
             "blocker_evidence",
         )
-        ksi_records = self._load_jsonl_with_fallback(
-            self._requested_ksi_evidence_path,
-            self.default_ksi_evidence_path,
-            "ksi_evidence",
+        pai_records = self._load_jsonl_with_fallback(
+            self._requested_pai_evidence_path,
+            self.default_pai_evidence_path,
+            "pai_evidence",
         )
-        tfi_records = self._load_jsonl_with_fallback(
-            self._requested_tfi_focus_path,
-            self.default_tfi_focus_path,
-            "tfi_focus",
+        tci_records = self._load_jsonl_with_fallback(
+            self._requested_tci_focus_path,
+            self.default_tci_focus_path,
+            "tci_focus",
         )
         path_plan_payload = self._load_path_plan_with_fallback()
 
@@ -296,18 +296,18 @@ class RepairDiagnosisBuilder:
         if not isinstance(blocker_hypotheses, list):
             return []
 
-        ksi_by_hypothesis: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-        for record in ksi_records:
+        pai_by_hypothesis: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for record in pai_records:
             hypothesis_id = _text(record.get("hypothesis_id"))
             if hypothesis_id:
-                ksi_by_hypothesis[hypothesis_id].append(record)
+                pai_by_hypothesis[hypothesis_id].append(record)
 
-        tfi_by_hypothesis, tfi_by_signature = self._index_tfi_records(tfi_records)
+        tci_by_hypothesis, tci_by_signature = self._index_tci_records(tci_records)
         path_plan_by_id, path_plan_by_signature = self._index_path_plan(path_plan_payload)
         function_pool = self._collect_function_pool(
             blocker_hypotheses=blocker_hypotheses,
-            ksi_records=ksi_records,
-            tfi_records=tfi_records,
+            pai_records=pai_records,
+            tci_records=tci_records,
             path_plan_payload=path_plan_payload,
         )
 
@@ -326,21 +326,21 @@ class RepairDiagnosisBuilder:
             signature = _path_signature(path, sink)
             plan_entry = path_plan_by_id.get(hypothesis_id) or path_plan_by_signature.get(signature) or {}
             origin_hypothesis_id = _text(plan_entry.get("origin_hypothesis_id"))
-            matching_tfi = list(tfi_by_hypothesis.get(hypothesis_id, []))
+            matching_tci = list(tci_by_hypothesis.get(hypothesis_id, []))
             if origin_hypothesis_id:
-                matching_tfi.extend(tfi_by_hypothesis.get(origin_hypothesis_id, []))
-            matching_tfi.extend(tfi_by_signature.get(signature, []))
-            matching_tfi = self._dedupe_dict_records(matching_tfi)
+                matching_tci.extend(tci_by_hypothesis.get(origin_hypothesis_id, []))
+            matching_tci.extend(tci_by_signature.get(signature, []))
+            matching_tci = self._dedupe_dict_records(matching_tci)
 
-            hypothesis_ksi = list(ksi_by_hypothesis.get(hypothesis_id, []))
+            hypothesis_pai = list(pai_by_hypothesis.get(hypothesis_id, []))
             diagnosis = self._build_single_diagnosis(
                 entry=entry,
                 hypothesis_id=hypothesis_id,
                 origin_hypothesis_id=origin_hypothesis_id or None,
                 path=path,
                 sink=sink,
-                ksi_records=hypothesis_ksi,
-                tfi_records=matching_tfi,
+                pai_records=hypothesis_pai,
+                tci_records=matching_tci,
                 support_functions=support_functions,
             )
             if diagnosis:
@@ -438,12 +438,12 @@ class RepairDiagnosisBuilder:
         return {}
 
     @staticmethod
-    def _index_tfi_records(
-        tfi_records: Sequence[Dict[str, Any]],
+    def _index_tci_records(
+        tci_records: Sequence[Dict[str, Any]],
     ) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[Tuple[str, ...], List[Dict[str, Any]]]]:
         by_hypothesis: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         by_signature: Dict[Tuple[str, ...], List[Dict[str, Any]]] = defaultdict(list)
-        for record in tfi_records:
+        for record in tci_records:
             if not isinstance(record, dict):
                 continue
             hypothesis_id = _text(record.get("hypothesis_id"))
@@ -481,8 +481,8 @@ class RepairDiagnosisBuilder:
     @staticmethod
     def _collect_function_pool(
         blocker_hypotheses: Sequence[Dict[str, Any]],
-        ksi_records: Sequence[Dict[str, Any]],
-        tfi_records: Sequence[Dict[str, Any]],
+        pai_records: Sequence[Dict[str, Any]],
+        tci_records: Sequence[Dict[str, Any]],
         path_plan_payload: Dict[str, Any],
     ) -> Set[str]:
         function_pool: Set[str] = set()
@@ -493,10 +493,10 @@ class RepairDiagnosisBuilder:
             sink = _text(entry.get("sink"))
             if sink:
                 function_pool.add(sink)
-        for record in ksi_records:
+        for record in pai_records:
             observations = record.get("observations") if isinstance(record.get("observations"), dict) else {}
             function_pool.update(_normalize_path(observations.get("functions")))
-        for record in tfi_records:
+        for record in tci_records:
             if not isinstance(record, dict):
                 continue
             function_pool.update(_normalize_path(record.get("path")))
@@ -549,8 +549,8 @@ class RepairDiagnosisBuilder:
         origin_hypothesis_id: Optional[str],
         path: List[str],
         sink: str,
-        ksi_records: Sequence[Dict[str, Any]],
-        tfi_records: Sequence[Dict[str, Any]],
+        pai_records: Sequence[Dict[str, Any]],
+        tci_records: Sequence[Dict[str, Any]],
         support_functions: Dict[str, List[str]],
     ) -> Optional[Dict[str, Any]]:
         progress = entry.get("progress_summary") if isinstance(entry.get("progress_summary"), dict) else {}
@@ -571,21 +571,21 @@ class RepairDiagnosisBuilder:
         frontier = _text(progress.get("frontier")) or sink
         best_prefix = _normalize_path(progress.get("best_prefix"))
 
-        tfi_focus_types = [_text(record.get("focus_type")) for record in tfi_records if isinstance(record, dict)]
-        tfi_focus_types = [item for item in tfi_focus_types if item]
-        tfi_reasons = [_text(record.get("reason")) for record in tfi_records if isinstance(record, dict)]
-        tfi_reasons = [item for item in tfi_reasons if item]
+        tci_focus_types = [_text(record.get("focus_type")) for record in tci_records if isinstance(record, dict)]
+        tci_focus_types = [item for item in tci_focus_types if item]
+        tci_reasons = [_text(record.get("reason")) for record in tci_records if isinstance(record, dict)]
+        tci_reasons = [item for item in tci_reasons if item]
 
         value_sequence_numbers: List[float] = []
         value_has_zero = False
         value_has_nonzero = False
         args_nonempty = False
-        ksi_related_sequences: List[str] = []
+        pai_related_sequences: List[str] = []
         observed_functions: List[str] = []
-        for record in ksi_records:
+        for record in pai_records:
             observations = record.get("observations") if isinstance(record.get("observations"), dict) else {}
             observed_functions.extend(_normalize_path(observations.get("functions")))
-            ksi_related_sequences.append(_text(record.get("sequence_id")))
+            pai_related_sequences.append(_text(record.get("sequence_id")))
             for value in observations.get("value_sequence", []) if isinstance(observations.get("value_sequence"), list) else []:
                 numeric_value = _as_float(value)
                 value_sequence_numbers.append(numeric_value)
@@ -606,15 +606,15 @@ class RepairDiagnosisBuilder:
                 recent_revert_reasons,
                 evidence_lines,
                 hints,
-                tfi_focus_types,
-                tfi_reasons,
+                tci_focus_types,
+                tci_reasons,
                 observed_functions,
             ]
         )
         path_texts = _flatten_texts([path, [sink, frontier, dominant_blocked_at]])
 
         caller_score = 0
-        if "caller_or_permission_condition" in tfi_focus_types:
+        if "caller_or_permission_condition" in tci_focus_types:
             caller_score += 2
         if sender_change_count > 0 or "sender_change" in top_suspected_blockers:
             caller_score += 1
@@ -647,7 +647,7 @@ class RepairDiagnosisBuilder:
         prestate_score = 0
         if any(function_name.lower() in ("transferfrom", "approve", "allowance") for function_name in path_texts):
             prestate_score += 2
-        if "repeated_frontier_block" in tfi_focus_types or "frontier_block" in top_suspected_blockers:
+        if "repeated_frontier_block" in tci_focus_types or "frontier_block" in top_suspected_blockers:
             prestate_score += 1
         if _contains_any(path_texts, PRESTATE_KEYWORDS):
             prestate_score += 1
@@ -663,7 +663,7 @@ class RepairDiagnosisBuilder:
             repeated_frontier_score += 1
         if dominant_blocked_at:
             repeated_frontier_score += 1
-        if "repeated_frontier_block" in tfi_focus_types:
+        if "repeated_frontier_block" in tci_focus_types:
             repeated_frontier_score += 2
 
         selected_type = ""
@@ -749,9 +749,9 @@ class RepairDiagnosisBuilder:
             _flatten_texts(
                 [
                     runtime.get("recent_sequences"),
-                    ksi_related_sequences,
-                    [record.get("sequence_id") for record in tfi_records if isinstance(record, dict)],
-                    [record.get("related_sequences") for record in tfi_records if isinstance(record, dict)],
+                    pai_related_sequences,
+                    [record.get("sequence_id") for record in tci_records if isinstance(record, dict)],
+                    [record.get("related_sequences") for record in tci_records if isinstance(record, dict)],
                 ]
             ),
             self.max_recent_sequences,
@@ -966,7 +966,7 @@ class RepairSequenceCandidateBuilder:
                     "prestate_policy": prestate_policy,
                     "priority": round(priority, 3),
                     "reason": reason,
-                    "source": "ksi_guided_guided_sequence_v1",
+                    "source": "pai_guided_guided_sequence_v1",
                 }
             )
 

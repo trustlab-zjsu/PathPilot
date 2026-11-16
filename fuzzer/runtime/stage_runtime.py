@@ -12,14 +12,14 @@ from typing import Any, Deque, Dict, List, Optional
 
 class StageType(str, Enum):
     GEI = "GEI"
-    KSI = "KSI"
+    PAI = "PAI"
 
 
 @dataclass
 class StageRuntimeConfig:
     enable_stage: bool = False
     force_gei_only: bool = False
-    max_stage: str = "ksi"
+    max_stage: str = "pai"
     stage_log_path: Optional[str] = None
     min_gei_generations: int = 2
     stagnation_window: int = 2
@@ -46,7 +46,7 @@ class StageRuntime:
     def __init__(self, config: Optional[StageRuntimeConfig] = None) -> None:
         self.config = config or StageRuntimeConfig()
         self.stage = StageType.GEI
-        self.stage_counts: Dict[str, int] = {StageType.GEI.value: 0, StageType.KSI.value: 0}
+        self.stage_counts: Dict[str, int] = {StageType.GEI.value: 0, StageType.PAI.value: 0}
         self.recent_feedback: Deque[Dict[str, Any]] = deque(
             maxlen=max(int(self.config.stagnation_window or 1), 1)
         )
@@ -58,9 +58,9 @@ class StageRuntime:
         )
         self.snapshot_reasons: Dict[str, int] = {}
         self.snapshot_sequence = 0
-        self.ksi_entry_generation: Optional[int] = None
-        self.ksi_transition_reason: Optional[str] = None
-        self.latest_ksi_observation: Dict[str, Any] = {}
+        self.pai_entry_generation: Optional[int] = None
+        self.pai_transition_reason: Optional[str] = None
+        self.latest_pai_observation: Dict[str, Any] = {}
         self._log_path: Optional[str] = None
         self._jsonl_mode = False
         self._prepare_log()
@@ -85,10 +85,10 @@ class StageRuntime:
         )
         transition, transition_reason = self._maybe_transition(generation)
 
-        if current_stage is StageType.KSI:
-            self.latest_ksi_observation = {
+        if current_stage is StageType.PAI:
+            self.latest_pai_observation = {
                 "generation": int(generation),
-                "transition_reason": self.ksi_transition_reason,
+                "transition_reason": self.pai_transition_reason,
                 "recent_code_delta": self._recent_sum("code_delta"),
                 "recent_revert_count": self._recent_sum("revert_count"),
                 "recent_invalid_count": self._recent_sum("invalid_count"),
@@ -122,14 +122,14 @@ class StageRuntime:
             "stage_enabled": bool(self.config.enable_stage),
             "stage_counts": dict(self.stage_counts),
             "gei_rounds": int(self.stage_counts.get(StageType.GEI.value, 0)),
-            "ksi_rounds": int(self.stage_counts.get(StageType.KSI.value, 0)),
-            "tfi_rounds": 0,
+            "pai_rounds": int(self.stage_counts.get(StageType.PAI.value, 0)),
+            "tci_rounds": 0,
             "force_gei_only": bool(self.config.force_gei_only),
             "stage_transition_count": len(self.transitions),
             "stage_transition_reasons": list(self.transition_reasons),
-            "ksi_entry_generation": self.ksi_entry_generation,
-            "ksi_transition_reason": self.ksi_transition_reason,
-            "ksi_observation": dict(self.latest_ksi_observation),
+            "pai_entry_generation": self.pai_entry_generation,
+            "pai_transition_reason": self.pai_transition_reason,
+            "pai_observation": dict(self.latest_pai_observation),
             "snapshot_pool_enabled": bool(self.config.enable_snapshot_pool),
             "snapshot_candidate_count": len(self.snapshot_candidates),
             "snapshot_pool_size": len(self.snapshot_candidates),
@@ -147,8 +147,8 @@ class StageRuntime:
             "stage_enabled": False,
             "stage_counts": {},
             "gei_rounds": 0,
-            "ksi_rounds": 0,
-            "tfi_rounds": 0,
+            "pai_rounds": 0,
+            "tci_rounds": 0,
             "force_gei_only": False,
             "stage_transition_count": 0,
             "stage_transition_reasons": [],
@@ -178,7 +178,7 @@ class StageRuntime:
             return None, None
         if self.config.force_gei_only:
             return None, None
-        if str(self.config.max_stage or "ksi").lower() == "gei":
+        if str(self.config.max_stage or "pai").lower() == "gei":
             return None, None
         if int(generation) < int(self.config.min_gei_generations):
             return None, None
@@ -190,10 +190,10 @@ class StageRuntime:
             return None, None
 
         reason = "gei_stagnation"
-        transition = f"{StageType.GEI.value}->{StageType.KSI.value}"
-        self.stage = StageType.KSI
-        self.ksi_entry_generation = int(generation)
-        self.ksi_transition_reason = reason
+        transition = f"{StageType.GEI.value}->{StageType.PAI.value}"
+        self.stage = StageType.PAI
+        self.pai_entry_generation = int(generation)
+        self.pai_transition_reason = reason
         self.transition_reasons.append(reason)
         self.transitions.append(
             {

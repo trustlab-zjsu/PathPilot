@@ -13,16 +13,16 @@ import os
 from typing import Any, Dict, Optional
 
 
-class TFIAgentRuntime:
+class TCIAgentRuntime:
     """Evidence-facing runtime with candidate execution paths removed."""
 
     def __init__(self, output_dir: str, *, llm_provider: Any = None, enable_agent: bool = False, **kwargs: Any) -> None:
         self.output_dir = os.path.abspath(output_dir) if output_dir else ""
-        self.summary_path = os.path.join(self.output_dir, "target_focus_agent_runtime_summary.json") if self.output_dir else ""
+        self.summary_path = os.path.join(self.output_dir, "target_condition_agent_runtime_summary.json") if self.output_dir else ""
         self.llm_provider = llm_provider
         self.enable_agent = bool(enable_agent)
         self.candidate_execution_enabled = False
-        self.tfi_planning_only = True
+        self.tci_planning_only = True
         self.binding_only = True
         self.candidate_injector = None
         self.candidate_execution_removed = True
@@ -74,4 +74,4 @@ class TFIAgentRuntime:
         return dict(self._last_result or self.run_once())
 
 
-__all__ = ["TFIAgentRuntime"]
+__all__ = ["TCIAgentRuntime"]

@@ -31,15 +31,15 @@ except ImportError:
 
 from fuzzer.guidance.path_plan import PathPlan, load_path_plan
 from fuzzer.guidance.path_progress import PathProgressTracker
-from fuzzer.runtime.ksi_runtime import KSIRuntime
+from fuzzer.runtime.pai_runtime import PAIRuntime
 from fuzzer.runtime.evidence_pool import EvidencePool
 from fuzzer.agent.agent_feedback import AgentFeedbackBuilder
 from fuzzer.guidance.gei_side_path import GEISidePathRecorder
 from fuzzer.guidance.side_path_plan_exporter import SidePathPlanExporter
 from fuzzer.guidance.soft_guidance import SoftPathGuidance, SoftGuidanceAnalysis
-from fuzzer.agent.target_focus_runtime import TFIRuntime
-from fuzzer.agent.target_focus_agent_runtime import TFIAgentRuntime
-from fuzzer.agent.target_focus_candidate_buffer import TFICandidateBuffer
+from fuzzer.agent.target_condition_runtime import TCIRuntime
+from fuzzer.agent.target_condition_agent_runtime import TCIAgentRuntime
+from fuzzer.agent.target_condition_candidate_buffer import TCICandidateBuffer
 from fuzzer.guidance.checkpoint_guidance import CheckpointGuidedRuntime
 from fuzzer.agent.agent_planner import AgentPlanner
 from fuzzer.agent.llm_provider import LLMProvider, LLMProviderConfig, LLMProviderError
@@ -999,12 +999,12 @@ def _record_agent_llm_stats(
 def _default_agent_runtime_state(args: Any, run_output_dir: str) -> Dict[str, Any]:
     return {
         "enabled": bool(
-            getattr(args, "enable_tfi_agent", False)
-            or getattr(args, "enable_ksi_llm_feedback", False)
+            getattr(args, "enable_tci_agent", False)
+            or getattr(args, "enable_pai_llm_feedback", False)
         ),
         "fresh_agent_run": bool(getattr(args, "fresh_agent_run", False)),
         "ignore_precomputed_paths": bool(getattr(args, "ignore_precomputed_paths", False)),
-        "ignore_precomputed_tfi_artifacts": bool(getattr(args, "ignore_precomputed_tfi_artifacts", False)),
+        "ignore_precomputed_tci_artifacts": bool(getattr(args, "ignore_precomputed_tci_artifacts", False)),
         "strict_llm_only": bool(getattr(args, "fresh_agent_run", False) and getattr(args, "agent_use_llm", False)),
         "run_start_time": getattr(args, "run_start_time", None),
         "run_output_dir": run_output_dir,
@@ -1021,18 +1021,18 @@ def _default_agent_runtime_state(args: Any, run_output_dir: str) -> Dict[str, An
         "llm_api_key_source": getattr(args, "llm_api_key_source", None),
         "fallback_used": False,
         "precomputed_path_used": False,
-        "precomputed_tfi_artifact_used": False,
+        "precomputed_tci_artifact_used": False,
         "precomputed_artifact_used": False,
         "agent_result_valid": False,
         "initial_hypothesis_count": 0,
         "latest_hypothesis_count": 0,
         "path_plan_source": None,
-        "ksi_agent_called_count": 0,
-        "ksi_feedback_llm_success_count": 0,
-        "ksi_feedback_llm_error_count": 0,
-        "tfi_agent_guidance_count": 0,
-        "tfi_guidance_llm_success_count": 0,
-        "tfi_guidance_llm_error_count": 0,
+        "pai_agent_called_count": 0,
+        "pai_feedback_llm_success_count": 0,
+        "pai_feedback_llm_error_count": 0,
+        "tci_agent_guidance_count": 0,
+        "tci_guidance_llm_success_count": 0,
+        "tci_guidance_llm_error_count": 0,
         "agent_revision_count": 0,
         "current_plan_payload": {"hypotheses": []},
         "current_plan_path": None,
@@ -1623,13 +1623,13 @@ def _apply_agent_plan_to_runtime(
     return not path_plan.is_empty()
 
 
-def _build_ksi_feedback_summary(ksi_records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_pai_feedback_summary(pai_records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     path_progress = []
     blocked_prefixes = []
     revert_patterns = []
     sender_value_arg_mismatches = []
     sink_or_frontier_status = []
-    for record in list(ksi_records or [])[-20:]:
+    for record in list(pai_records or [])[-20:]:
         if not isinstance(record, dict):
             continue
         observations = record.get("observations") if isinstance(record.get("observations"), dict) else {}
@@ -1694,25 +1694,25 @@ def _build_ksi_feedback_summary(ksi_records: Sequence[Dict[str, Any]]) -> Dict[s
     }
 
 
-def _build_ksi_feedback_prompt(
+def _build_pai_feedback_prompt(
     current_hypotheses: Sequence[Dict[str, Any]],
-    ksi_summary: Dict[str, Any],
+    pai_summary: Dict[str, Any],
     allowed_functions: Sequence[str],
 ) -> str:
     payload = {
         "current_hypotheses": list(current_hypotheses or [])[:20],
-        "ksi_evidence_summary": ksi_summary,
+        "pai_evidence_summary": pai_summary,
         "allowed_functions": list(allowed_functions or []),
     }
     instructions = [
         "You are a smart-contract fuzzing hypothesis revision agent.",
-        "Revise path hypotheses from KSI runtime evidence.",
+        "Revise path hypotheses from PAI runtime evidence.",
         "Do not generate executable transactions.",
         "Only revise, keep, drop, or split existing hypotheses.",
         "Do not invent function names outside allowed_functions.",
         "Output strict JSON only.",
         "Use exactly this schema:",
-        '{ "agent_feedback_type": "ksi_path_revision", "hypothesis_updates": [ { "hypothesis_id": "AGENT_H1", "action": "revise", "revised_path": ["funcA","funcB"], "reason": "...", "new_expected_blockers": ["..."], "new_binding_hints": ["..."] } ] }',
+        '{ "agent_feedback_type": "pai_path_revision", "hypothesis_updates": [ { "hypothesis_id": "AGENT_H1", "action": "revise", "revised_path": ["funcA","funcB"], "reason": "...", "new_expected_blockers": ["..."], "new_binding_hints": ["..."] } ] }',
         "",
         "Input JSON:",
         json.dumps(payload, ensure_ascii=True, indent=2),
@@ -1720,7 +1720,7 @@ def _build_ksi_feedback_prompt(
     return "\n".join(instructions)
 
 
-def _apply_ksi_hypothesis_updates(
+def _apply_pai_hypothesis_updates(
     current_plan_payload: Dict[str, Any],
     raw_feedback: Any,
     allowed_functions: Sequence[str],
@@ -1763,7 +1763,7 @@ def _apply_ksi_hypothesis_updates(
                 target["new_binding_hints"] = _clean_list(update.get("new_binding_hints"))
             if _text(update.get("reason")).strip():
                 target["revision_reason"] = _text(update.get("reason")).strip()
-            target["source"] = "ksi_feedback_agent_revision_v1"
+            target["source"] = "pai_feedback_agent_revision_v1"
             revised_count += 1
             continue
         if action == "split" and revised_path:
@@ -1773,14 +1773,14 @@ def _apply_ksi_hypothesis_updates(
                 {
                     "id": new_id,
                     "hypothesis_id": new_id,
-                    "vulnerability_type": "ksi_feedback_split_path",
+                    "vulnerability_type": "pai_feedback_split_path",
                     "path": revised_path,
                     "sink": revised_path[-1],
                     "priority": 0.75,
                     "expected_blockers": _clean_list(update.get("new_expected_blockers")),
                     "new_binding_hints": _clean_list(update.get("new_binding_hints")),
                     "reason": _text(update.get("reason")).strip() or None,
-                    "source": "ksi_feedback_agent_revision_v1",
+                    "source": "pai_feedback_agent_revision_v1",
                 }
             )
             revised_count += 1
@@ -1791,7 +1791,7 @@ def _write_full_agent_summary(run_output_dir: str, contract_name: str, results: 
     if not run_output_dir:
         return
     agent_state = results.get("fresh_agent_runtime") if isinstance(results.get("fresh_agent_runtime"), dict) else {}
-    tfi_summary = results.get("target_focus_agent_runtime") if isinstance(results.get("target_focus_agent_runtime"), dict) else {}
+    tci_summary = results.get("target_condition_agent_runtime") if isinstance(results.get("target_condition_agent_runtime"), dict) else {}
     path_validation = results.get("path_validation") if isinstance(results.get("path_validation"), dict) else {}
     code_coverage = results.get("code_coverage") if isinstance(results.get("code_coverage"), dict) else {}
     branch_coverage = results.get("branch_coverage") if isinstance(results.get("branch_coverage"), dict) else {}
@@ -1804,8 +1804,8 @@ def _write_full_agent_summary(run_output_dir: str, contract_name: str, results: 
     if not gei60_state and isinstance(results.get("pure_fuzz_warmup"), dict):
         gei60_state = results.get("pure_fuzz_warmup")
     checkpoint_summary = (
-        tfi_summary.get("checkpoint_guided_summary")
-        if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+        tci_summary.get("checkpoint_guided_summary")
+        if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
         else {}
     )
     agent_llm_events = _listify(agent_state.get("llm_interaction_events"))
@@ -1840,21 +1840,21 @@ def _write_full_agent_summary(run_output_dir: str, contract_name: str, results: 
         "wall_snapshot_recorded": bool(timing_summary.get("wall_snapshot_recorded")),
         "fresh_agent_run": bool(agent_state.get("fresh_agent_run")),
         "precomputed_path_used": bool(agent_state.get("precomputed_path_used")),
-        "precomputed_tfi_artifact_used": bool(agent_state.get("precomputed_tfi_artifact_used")),
+        "precomputed_tci_artifact_used": bool(agent_state.get("precomputed_tci_artifact_used")),
         "precomputed_artifact_used": bool(agent_state.get("precomputed_artifact_used")),
         "gei_core_enabled": bool(getattr(args, "enable_gei_core", False)),
-        "ksi_enabled": bool(getattr(args, "enable_ksi_evidence", False)),
-        "tfi_enabled": bool(
-            getattr(args, "enable_tfi_agent", False)
-            or getattr(args, "enable_target_focus_soft_injection", False)
+        "pai_enabled": bool(getattr(args, "enable_pai_evidence", False)),
+        "tci_enabled": bool(
+            getattr(args, "enable_tci_agent", False)
+            or getattr(args, "enable_target_condition_soft_injection", False)
             or getattr(args, "enable_guided_candidate_injection", False)
             or getattr(args, "enable_checkpoint_guided_injection", False)
         ),
-        "tfi_planning_only": bool(getattr(args, "tfi_planning_only", False)),
+        "tci_planning_only": bool(getattr(args, "tci_planning_only", False)),
         "candidate_lifecycle_config_status": (
             "planning_only"
             if (
-                bool(getattr(args, "tfi_planning_only", False))
+                bool(getattr(args, "tci_planning_only", False))
                 and not bool(getattr(args, "enable_guided_candidate_injection", False))
                 and not bool(getattr(args, "enable_checkpoint_guided_injection", False))
             )
@@ -1878,7 +1878,7 @@ def _write_full_agent_summary(run_output_dir: str, contract_name: str, results: 
         "failure_aware_agent_repair_enabled": bool(getattr(args, "enable_failure_aware_agent_repair", False)),
         "strong_useful_scheduling_enabled": bool(getattr(args, "enable_strong_useful_scheduling", False)),
         "agent_parameter_materializer_enabled": bool(getattr(args, "enable_agent_parameter_materializer", False)),
-        "agent_enabled": bool(getattr(args, "enable_tfi_agent", False)),
+        "agent_enabled": bool(getattr(args, "enable_tci_agent", False)),
         "agent_use_llm": bool(getattr(args, "agent_use_llm", False)),
         "rq1_config": normalize_rq1_config(getattr(args, "rq1_config", "")),
         "rq1_g_sec": int(getattr(args, "rq1_g_sec", 0) or 0),
@@ -1914,164 +1914,164 @@ def _write_full_agent_summary(run_output_dir: str, contract_name: str, results: 
         "agent_interaction_count": agent_llm_count + checkpoint_llm_count,
         "agent_result_valid": bool(agent_state.get("agent_result_valid")),
         "agent_initial_hypothesis_count": int(agent_state.get("initial_hypothesis_count") or 0),
-        "ksi_agent_called_count": int(agent_state.get("ksi_agent_called_count") or 0),
-        "ksi_feedback_llm_success_count": int(agent_state.get("ksi_feedback_llm_success_count") or 0),
-        "ksi_feedback_llm_error_count": int(agent_state.get("ksi_feedback_llm_error_count") or 0),
-        "tfi_agent_guidance_count": int(agent_state.get("tfi_agent_guidance_count") or 0),
-        "tfi_guidance_llm_success_count": int(agent_state.get("tfi_guidance_llm_success_count") or 0),
-        "tfi_guidance_llm_error_count": int(agent_state.get("tfi_guidance_llm_error_count") or 0),
+        "pai_agent_called_count": int(agent_state.get("pai_agent_called_count") or 0),
+        "pai_feedback_llm_success_count": int(agent_state.get("pai_feedback_llm_success_count") or 0),
+        "pai_feedback_llm_error_count": int(agent_state.get("pai_feedback_llm_error_count") or 0),
+        "tci_agent_guidance_count": int(agent_state.get("tci_agent_guidance_count") or 0),
+        "tci_guidance_llm_success_count": int(agent_state.get("tci_guidance_llm_success_count") or 0),
+        "tci_guidance_llm_error_count": int(agent_state.get("tci_guidance_llm_error_count") or 0),
         "agent_revision_count": int(agent_state.get("agent_revision_count") or 0),
-        "candidate_gap_event_count": int(tfi_summary.get("candidate_gap_event_count") or 0),
-        "candidate_built_count": int(tfi_summary.get("candidate_built_count") or 0),
-        "candidate_injected_count": int(tfi_summary.get("candidate_injected_count") or 0),
-        "candidate_executed_count": int(tfi_summary.get("candidate_executed_count") or 0),
-        "useful_candidate_count": int(tfi_summary.get("useful_candidate_count") or 0),
-        "soft_injected_count": int(tfi_summary.get("soft_injected_count") or 0),
-        "guided_candidate_count": int(tfi_summary.get("guided_candidate_count") or 0),
-        "agent_guided_candidate_count": int(tfi_summary.get("agent_guided_candidate_count") or 0),
-        "tfi_guided_candidate_count": int(tfi_summary.get("tfi_guided_candidate_count") or 0),
-        "ksi_guided_candidate_count": int(tfi_summary.get("ksi_guided_candidate_count") or 0),
-        "gei_guided_candidate_count": int(tfi_summary.get("gei_guided_candidate_count") or 0),
-        "checkpoint_guided_built_count": int(tfi_summary.get("checkpoint_guided_built_count") or 0),
-        "checkpoint_guided_injected_count": int(tfi_summary.get("checkpoint_guided_injected_count") or 0),
-        "checkpoint_guided_executed_count": int(tfi_summary.get("checkpoint_guided_executed_count") or 0),
-        "checkpoint_guided_medium_useful_count": int(tfi_summary.get("checkpoint_guided_medium_useful_count") or 0),
-        "checkpoint_guided_strong_useful_count": int(tfi_summary.get("checkpoint_guided_strong_useful_count") or 0),
-        "checkpoint_guided_checkpoint_delta_count": int(tfi_summary.get("checkpoint_guided_checkpoint_delta_count") or 0),
-        "checkpoint_guided_oracle_level_delta_count": int(tfi_summary.get("checkpoint_guided_oracle_level_delta_count") or 0),
+        "candidate_gap_event_count": int(tci_summary.get("candidate_gap_event_count") or 0),
+        "candidate_built_count": int(tci_summary.get("candidate_built_count") or 0),
+        "candidate_injected_count": int(tci_summary.get("candidate_injected_count") or 0),
+        "candidate_executed_count": int(tci_summary.get("candidate_executed_count") or 0),
+        "useful_candidate_count": int(tci_summary.get("useful_candidate_count") or 0),
+        "soft_injected_count": int(tci_summary.get("soft_injected_count") or 0),
+        "guided_candidate_count": int(tci_summary.get("guided_candidate_count") or 0),
+        "agent_guided_candidate_count": int(tci_summary.get("agent_guided_candidate_count") or 0),
+        "tci_guided_candidate_count": int(tci_summary.get("tci_guided_candidate_count") or 0),
+        "pai_guided_candidate_count": int(tci_summary.get("pai_guided_candidate_count") or 0),
+        "gei_guided_candidate_count": int(tci_summary.get("gei_guided_candidate_count") or 0),
+        "checkpoint_guided_built_count": int(tci_summary.get("checkpoint_guided_built_count") or 0),
+        "checkpoint_guided_injected_count": int(tci_summary.get("checkpoint_guided_injected_count") or 0),
+        "checkpoint_guided_executed_count": int(tci_summary.get("checkpoint_guided_executed_count") or 0),
+        "checkpoint_guided_medium_useful_count": int(tci_summary.get("checkpoint_guided_medium_useful_count") or 0),
+        "checkpoint_guided_strong_useful_count": int(tci_summary.get("checkpoint_guided_strong_useful_count") or 0),
+        "checkpoint_guided_checkpoint_delta_count": int(tci_summary.get("checkpoint_guided_checkpoint_delta_count") or 0),
+        "checkpoint_guided_oracle_level_delta_count": int(tci_summary.get("checkpoint_guided_oracle_level_delta_count") or 0),
         "prestate_materialized_count": int(
-            int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("materialization") or {}).get("prefix_materialized") or 0))
-            + int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("materialization") or {}).get("prefix_suffix_materialized") or 0))
-            + int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("materialization") or {}).get("suffix_materialized") or 0))
+            int((((tci_summary.get("checkpoint_guided_summary") or {}).get("materialization") or {}).get("prefix_materialized") or 0))
+            + int((((tci_summary.get("checkpoint_guided_summary") or {}).get("materialization") or {}).get("prefix_suffix_materialized") or 0))
+            + int((((tci_summary.get("checkpoint_guided_summary") or {}).get("materialization") or {}).get("suffix_materialized") or 0))
         ),
-        "prefix_replay_candidate_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("prefix_replay_suffix_summary") or {}).get("prefix_replay_candidates")) or 0),
-        "suffix_mutation_candidate_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("prefix_replay_suffix_summary") or {}).get("suffix_mutation_candidates")) or 0),
-        "effect_probe_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("effect_probe_summary") or {}).get("effect_probe_count")) or 0),
-        "failure_repair_candidate_built_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_candidate_built")) or 0),
-        "failure_repair_candidate_materialized_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_candidate_materialized")) or 0),
-        "failure_repair_candidate_executed_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_candidate_executed")) or 0),
-        "failure_repair_to_medium_delta_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_medium_delta")) or 0),
-        "failure_repair_to_strong_delta_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_strong_delta")) or 0),
-        "failure_repair_to_l2_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_l2")) or 0),
-        "failure_repair_to_l3_count": int((((tfi_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_l3")) or 0),
+        "prefix_replay_candidate_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("prefix_replay_suffix_summary") or {}).get("prefix_replay_candidates")) or 0),
+        "suffix_mutation_candidate_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("prefix_replay_suffix_summary") or {}).get("suffix_mutation_candidates")) or 0),
+        "effect_probe_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("effect_probe_summary") or {}).get("effect_probe_count")) or 0),
+        "failure_repair_candidate_built_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_candidate_built")) or 0),
+        "failure_repair_candidate_materialized_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_candidate_materialized")) or 0),
+        "failure_repair_candidate_executed_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_candidate_executed")) or 0),
+        "failure_repair_to_medium_delta_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_medium_delta")) or 0),
+        "failure_repair_to_strong_delta_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_strong_delta")) or 0),
+        "failure_repair_to_l2_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_l2")) or 0),
+        "failure_repair_to_l3_count": int((((tci_summary.get("checkpoint_guided_summary") or {}).get("failure_repair_summary") or {}).get("repair_to_l3")) or 0),
         "checkpoint_guided_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_guided_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_guided_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "checkpoint_progress_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_progress")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_progress")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "checkpoint_guided_candidates_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_guided_candidates")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_guided_candidates")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "checkpoint_guided_candidate_delta_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_guided_candidate_delta")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("checkpoint_guided_candidate_delta")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "parameter_materialization_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("parameter_materialization_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("parameter_materialization_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "prestate_builder_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("prestate_builder_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("prestate_builder_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "prefix_replay_suffix_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("prefix_replay_suffix_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("prefix_replay_suffix_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "effect_probe_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("effect_probe_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("effect_probe_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "agent_effect_repair_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("agent_effect_repair_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("agent_effect_repair_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "failure_signature_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_signature_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_signature_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "failure_repair_trigger_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_repair_trigger_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_repair_trigger_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "repair_materialization_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("repair_materialization_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("repair_materialization_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "repair_scheduling_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("repair_scheduling_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("repair_scheduling_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "failure_repair_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_repair_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_repair_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "failure_repair_candidate_delta_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_repair_candidate_delta")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("failure_repair_candidate_delta")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "llm_failure_repair_interactions_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("llm_failure_repair_interactions")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("llm_failure_repair_interactions")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "llm_failure_repair_prompt_catalog_json_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("llm_failure_repair_prompt_catalog_json")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("llm_failure_repair_prompt_catalog_json")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "llm_failure_repair_prompt_catalog_md_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("llm_failure_repair_prompt_catalog_md")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("llm_failure_repair_prompt_catalog_md")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "strong_useful_scheduling_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("strong_useful_scheduling_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("strong_useful_scheduling_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "module_contribution_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("module_contribution_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("module_contribution_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "effect_forcing_summary_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("effect_forcing_summary")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("effect_forcing_summary")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "effect_forcing_candidate_delta_path": (
-            ((tfi_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("effect_forcing_candidate_delta")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            ((tci_summary.get("checkpoint_guided_summary") or {}).get("paths") or {}).get("effect_forcing_candidate_delta")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "checkpoint_guided_current_best_level": (
-            (tfi_summary.get("checkpoint_guided_summary") or {}).get("current_best_level")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            (tci_summary.get("checkpoint_guided_summary") or {}).get("current_best_level")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "checkpoint_guided_next_missing_checkpoint": (
-            (tfi_summary.get("checkpoint_guided_summary") or {}).get("next_missing_checkpoint")
-            if isinstance(tfi_summary.get("checkpoint_guided_summary"), dict)
+            (tci_summary.get("checkpoint_guided_summary") or {}).get("next_missing_checkpoint")
+            if isinstance(tci_summary.get("checkpoint_guided_summary"), dict)
             else None
         ),
         "main_cov": code_coverage.get("percentage"),
@@ -2093,7 +2093,7 @@ def _write_full_agent_summary(run_output_dir: str, contract_name: str, results: 
         "skipped_candidate_injected": False,
         "target_seen_without_progress_injected": False,
         "review_queue_injected": False,
-        "target_focus_runtime_error_count": int(tfi_summary.get("target_focus_runtime_error_count") or 0),
+        "target_condition_runtime_error_count": int(tci_summary.get("target_condition_runtime_error_count") or 0),
         "final_wall_clock_elapsed_sec": timing_summary.get("final_wall_clock_elapsed_sec"),
         "final_fuzz_active_elapsed_sec": timing_summary.get("final_fuzz_active_elapsed_sec"),
         "wall_clock_time_s": timing_summary.get("final_wall_clock_elapsed_sec"),
@@ -2134,7 +2134,7 @@ def _write_full_agent_summary(run_output_dir: str, contract_name: str, results: 
     else:
         summary["llm_health"] = "no_success_recorded"
 
-    if not bool(summary.get("tfi_enabled")):
+    if not bool(summary.get("tci_enabled")):
         summary["candidate_lifecycle_health"] = "not_enabled"
     elif _text(summary.get("candidate_lifecycle_config_status")).strip() == "planning_only":
         summary["candidate_lifecycle_health"] = "planning_only"
@@ -2164,7 +2164,7 @@ def _agent_runtime_result_payload(agent_state: Dict[str, Any]) -> Dict[str, Any]
     payload = dict(agent_state or {})
     payload.pop("_env_ref", None)
     payload["precomputed_artifact_used"] = bool(
-        payload.get("precomputed_path_used") or payload.get("precomputed_tfi_artifact_used")
+        payload.get("precomputed_path_used") or payload.get("precomputed_tci_artifact_used")
     )
     payload["agent_result_valid"] = bool(
         payload.get("llm_called")
@@ -2175,12 +2175,12 @@ def _agent_runtime_result_payload(agent_state: Dict[str, Any]) -> Dict[str, Any]
     payload["current_plan_path"] = payload.get("current_plan_path")
     payload["initial_hypothesis_count"] = int(payload.get("initial_hypothesis_count") or 0)
     payload["latest_hypothesis_count"] = int(payload.get("latest_hypothesis_count") or 0)
-    payload["ksi_agent_called_count"] = int(payload.get("ksi_agent_called_count") or 0)
-    payload["ksi_feedback_llm_success_count"] = int(payload.get("ksi_feedback_llm_success_count") or 0)
-    payload["ksi_feedback_llm_error_count"] = int(payload.get("ksi_feedback_llm_error_count") or 0)
-    payload["tfi_agent_guidance_count"] = int(payload.get("tfi_agent_guidance_count") or 0)
-    payload["tfi_guidance_llm_success_count"] = int(payload.get("tfi_guidance_llm_success_count") or 0)
-    payload["tfi_guidance_llm_error_count"] = int(payload.get("tfi_guidance_llm_error_count") or 0)
+    payload["pai_agent_called_count"] = int(payload.get("pai_agent_called_count") or 0)
+    payload["pai_feedback_llm_success_count"] = int(payload.get("pai_feedback_llm_success_count") or 0)
+    payload["pai_feedback_llm_error_count"] = int(payload.get("pai_feedback_llm_error_count") or 0)
+    payload["tci_agent_guidance_count"] = int(payload.get("tci_agent_guidance_count") or 0)
+    payload["tci_guidance_llm_success_count"] = int(payload.get("tci_guidance_llm_success_count") or 0)
+    payload["tci_guidance_llm_error_count"] = int(payload.get("tci_guidance_llm_error_count") or 0)
     payload["agent_revision_count"] = int(payload.get("agent_revision_count") or 0)
     payload["llm_interaction_time_total_sec"] = float(payload.get("llm_interaction_time_total_sec") or 0.0)
     payload["agent_interaction_total_sec"] = float(
@@ -2229,8 +2229,8 @@ def _initialize_fresh_agent_plan(
 
     if (
         (
-            getattr(args, "enable_tfi_agent", False)
-            or getattr(args, "enable_ksi_llm_feedback", False)
+            getattr(args, "enable_tci_agent", False)
+            or getattr(args, "enable_pai_llm_feedback", False)
         )
         and getattr(args, "agent_use_llm", False)
         and llm_provider
@@ -2387,7 +2387,7 @@ def _ensure_delayed_fresh_agent_plan(
     return True
 
 
-class AgentKSIFeedbackAnalysis(OnTheFlyAnalysis):
+class AgentPAIFeedbackAnalysis(OnTheFlyAnalysis):
     interval = 1
 
     def __init__(self, logger: Any, llm_provider: Optional[LLMProvider], interval: int = 20) -> None:
@@ -2432,15 +2432,15 @@ class AgentKSIFeedbackAnalysis(OnTheFlyAnalysis):
         current_hypotheses = [item for item in _listify(current_payload.get("hypotheses")) if isinstance(item, dict)]
         if not current_hypotheses:
             return
-        ksi_runtime = getattr(env, "ksi_runtime", None)
+        pai_runtime = getattr(env, "pai_runtime", None)
         evidence_pool_path = os.path.join(_text(agent_state.get("run_output_dir")).strip(), "evidence_pool.jsonl")
-        records = EvidencePool.read(evidence_pool_path, "ksi_path_evidence")
+        records = EvidencePool.read(evidence_pool_path, "pai_path_evidence")
         if not records:
-            ksi_path = getattr(ksi_runtime, "output_path", None)
-            if not ksi_path or not os.path.exists(ksi_path):
+            pai_path = getattr(pai_runtime, "output_path", None)
+            if not pai_path or not os.path.exists(pai_path):
                 return
             try:
-                with open(ksi_path, "r", encoding="utf-8") as handle:
+                with open(pai_path, "r", encoding="utf-8") as handle:
                     for line in handle:
                         line = line.strip()
                         if not line:
@@ -2457,7 +2457,7 @@ class AgentKSIFeedbackAnalysis(OnTheFlyAnalysis):
             return
         new_records = records[self.last_record_count :]
         self.last_record_count = len(records)
-        ksi_summary = _build_ksi_feedback_summary(new_records)
+        pai_summary = _build_pai_feedback_summary(new_records)
         evidence_count = len(new_records)
         hypotheses_updated = 0
         llm_called = False
@@ -2466,16 +2466,16 @@ class AgentKSIFeedbackAnalysis(OnTheFlyAnalysis):
         if _llm_runtime_allowed(env, runtime_args) and self.llm_provider and self.llm_provider.is_available() and self.llm_provider.is_configured():
             llm_started_at = time.time()
             try:
-                agent_state["ksi_agent_called_count"] = int(agent_state.get("ksi_agent_called_count") or 0) + 1
+                agent_state["pai_agent_called_count"] = int(agent_state.get("pai_agent_called_count") or 0) + 1
                 raw_feedback = self.llm_provider.generate_json(
-                    _build_ksi_feedback_prompt(
+                    _build_pai_feedback_prompt(
                         current_hypotheses=current_hypotheses,
-                        ksi_summary=ksi_summary,
+                        pai_summary=pai_summary,
                         allowed_functions=agent_state.get("function_names") or [],
                     )
                 )
                 llm_called = True
-                revised_payload, hypotheses_updated = _apply_ksi_hypothesis_updates(
+                revised_payload, hypotheses_updated = _apply_pai_hypothesis_updates(
                     current_plan_payload=current_payload,
                     raw_feedback=raw_feedback,
                     allowed_functions=agent_state.get("function_names") or [],
@@ -2492,16 +2492,16 @@ class AgentKSIFeedbackAnalysis(OnTheFlyAnalysis):
                         agent_state,
                         revised_payload,
                         plan_path,
-                        plan_source="ksi_feedback_agent_revision",
+                        plan_source="pai_feedback_agent_revision",
                     )
                     agent_state["agent_revision_count"] = int(agent_state.get("agent_revision_count") or 0) + hypotheses_updated
-                agent_state["ksi_feedback_llm_success_count"] = int(
-                    agent_state.get("ksi_feedback_llm_success_count") or 0
+                agent_state["pai_feedback_llm_success_count"] = int(
+                    agent_state.get("pai_feedback_llm_success_count") or 0
                 ) + 1
                 _record_agent_llm_stats(agent_state, llm_called=True, llm_success=True)
                 _record_agent_llm_timing(
                     agent_state,
-                    phase="ksi_feedback",
+                    phase="pai_feedback",
                     started_at=llm_started_at,
                     ended_at=time.time(),
                     success=True,
@@ -2515,15 +2515,15 @@ class AgentKSIFeedbackAnalysis(OnTheFlyAnalysis):
                 _record_agent_llm_stats(agent_state, llm_called=True, error=str(exc), fallback_used=True)
                 _record_agent_llm_timing(
                     agent_state,
-                    phase="ksi_feedback",
+                    phase="pai_feedback",
                     started_at=llm_started_at,
                     ended_at=time.time(),
                     success=False,
                     error=str(exc),
                     used_fallback=True,
                 )
-                agent_state["ksi_feedback_llm_error_count"] = int(
-                    agent_state.get("ksi_feedback_llm_error_count") or 0
+                agent_state["pai_feedback_llm_error_count"] = int(
+                    agent_state.get("pai_feedback_llm_error_count") or 0
                 ) + 1
             except Exception as exc:
                 llm_called = True
@@ -2531,27 +2531,27 @@ class AgentKSIFeedbackAnalysis(OnTheFlyAnalysis):
                 _record_agent_llm_stats(
                     agent_state,
                     llm_called=True,
-                    error="ksi_feedback_runtime_error: {}".format(str(exc)),
+                    error="pai_feedback_runtime_error: {}".format(str(exc)),
                     fallback_used=True,
                 )
                 _record_agent_llm_timing(
                     agent_state,
-                    phase="ksi_feedback",
+                    phase="pai_feedback",
                     started_at=llm_started_at,
                     ended_at=time.time(),
                     success=False,
-                    error="ksi_feedback_runtime_error: {}".format(str(exc)),
+                    error="pai_feedback_runtime_error: {}".format(str(exc)),
                     used_fallback=True,
                 )
-                agent_state["ksi_feedback_llm_error_count"] = int(
-                    agent_state.get("ksi_feedback_llm_error_count") or 0
+                agent_state["pai_feedback_llm_error_count"] = int(
+                    agent_state.get("pai_feedback_llm_error_count") or 0
                 ) + 1
         else:
             fallback_used = True
 
         env.results["fresh_agent_runtime"] = _agent_runtime_result_payload(agent_state)
         self.logger.info(
-            "[AGENT_KSI_FEEDBACK] round=%s evidence_count=%s hypotheses_updated=%s llm_called=%s fallback_used=%s",
+            "[AGENT_PAI_FEEDBACK] round=%s evidence_count=%s hypotheses_updated=%s llm_called=%s fallback_used=%s",
             round_id,
             evidence_count,
             hypotheses_updated,
@@ -2585,13 +2585,13 @@ class RQ1GEISenderPoolRestrictionAnalysis(OnTheFlyAnalysis):
             _update_rq1_gei_sender_pool(env, logger=self.logger)
 
 
-class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
+class TCISoftInjectionAnalysis(OnTheFlyAnalysis):
     interval = 1
 
     def __init__(
         self,
-        runtime: TFIAgentRuntime,
-        buffer: TFICandidateBuffer,
+        runtime: TCIAgentRuntime,
+        buffer: TCICandidateBuffer,
         logger: Any,
         interval: int = 20,
         max_per_round: int = 3,
@@ -2621,7 +2621,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             self.guided_injection_confidence_threshold = 0.0
         self.agent_called_count = 0
         self.agent_error_count = 0
-        self.target_focus_runtime_error_count = 0
+        self.target_condition_runtime_error_count = 0
         self.candidate_built_count = 0
         self.candidate_injected_count = 0
         self.candidate_executed_count = 0
@@ -2639,11 +2639,11 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         self.bypasses_normal_population_order = False
         self.last_error = ""
         self.force_retry_round = None
-        self.tfi_phase_bootstrap_done = False
+        self.tci_phase_bootstrap_done = False
         self.guided_candidate_count = 0
         self.agent_guided_candidate_count = 0
-        self.tfi_guided_candidate_count = 0
-        self.ksi_guided_candidate_count = 0
+        self.tci_guided_candidate_count = 0
+        self.pai_guided_candidate_count = 0
         self.gei_guided_candidate_count = 0
         self.useful_by_reason: Dict[str, int] = {}
         self.checkpoint_guided_built_count = 0
@@ -2667,7 +2667,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
 
     def setup(self, ng, engine):
         if engine is not None and getattr(engine, "env", None) is not None:
-            setattr(engine.env, "target_focus_soft_injection_analysis", self)
+            setattr(engine.env, "target_condition_soft_injection_analysis", self)
             try:
                 setattr(self.runtime, "env", engine.env)
             except Exception:
@@ -2832,11 +2832,11 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
                 pass
         if env is not None and _gei60_active(env):
             return
-        if env is not None and not rq1_phase_allows_feature(env, "tfi", getattr(env, "args", None)):
+        if env is not None and not rq1_phase_allows_feature(env, "tci", getattr(env, "args", None)):
             if (
                 self.enable_checkpoint_guided_injection
                 and self.checkpoint_guided_runtime is not None
-                and rq1_phase_allows_feature(env, "ksi", getattr(env, "args", None))
+                and rq1_phase_allows_feature(env, "pai", getattr(env, "args", None))
                 and round_id % self.runtime_interval == 0
             ):
                 self._checkpoint_observe_only(round_id)
@@ -2849,11 +2849,11 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         should_run = (round_id % self.runtime_interval == 0)
         if (
             env is not None
-            and not self.tfi_phase_bootstrap_done
+            and not self.tci_phase_bootstrap_done
             and rq1_current_phase(env, getattr(env, "args", None)) == "T"
         ):
             should_run = True
-            self.tfi_phase_bootstrap_done = True
+            self.tci_phase_bootstrap_done = True
         if self.force_retry_round is not None and round_id >= int(self.force_retry_round):
             should_run = True
             self.force_retry_round = None
@@ -2865,14 +2865,14 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             result = self.runtime.run_once()
         except Exception as exc:
             self.agent_error_count += 1
-            self.target_focus_runtime_error_count += 1
-            self.last_error = "target_focus_runtime_error: {}".format(str(exc))
+            self.target_condition_runtime_error_count += 1
+            self.last_error = "target_condition_runtime_error: {}".format(str(exc))
             self.logger.warning(
-                "[TFI_TASK_BUILD] round=%s status=error used_inputs_count=0 missing_inputs_count=0 scope_count=0 request_count=0 plan_count=0 task_count=0 candidate_gap_event_count=0 reason=%s",
+                "[TCI_TASK_BUILD] round=%s status=error used_inputs_count=0 missing_inputs_count=0 scope_count=0 request_count=0 plan_count=0 task_count=0 candidate_gap_event_count=0 reason=%s",
                 round_id,
                 self.last_error,
             )
-            self.logger.warning("[TFI_AGENT] round=%s tasks_seen=0 candidate_gap_events_seen=0 guidance_generated=0 candidates_built=0 candidates_executed=0 useful_candidates=0 agent_called=%s llm_called=0 fallback_used=0 skipped_reason=runtime_error errors=%s",
+            self.logger.warning("[TCI_AGENT] round=%s tasks_seen=0 candidate_gap_events_seen=0 guidance_generated=0 candidates_built=0 candidates_executed=0 useful_candidates=0 agent_called=%s llm_called=0 fallback_used=0 skipped_reason=runtime_error errors=%s",
                                 round_id, int(self.enable_agent), self.last_error)
             return
 
@@ -2922,7 +2922,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         task_build = result.get("task_build") if isinstance(result.get("task_build"), dict) else {}
         self._maybe_enable_runtime_path_tracking(engine, task_build, round_id)
         self.logger.info(
-            "[TFI_TASK_BUILD] round=%s status=%s used_inputs_count=%s missing_inputs_count=%s scope_count=%s request_count=%s plan_count=%s task_count=%s candidate_gap_event_count=%s reason=%s",
+            "[TCI_TASK_BUILD] round=%s status=%s used_inputs_count=%s missing_inputs_count=%s scope_count=%s request_count=%s plan_count=%s task_count=%s candidate_gap_event_count=%s reason=%s",
             round_id,
             _text(task_build.get("status")).strip() or "unknown",
             len(_listify(task_build.get("used_inputs"))),
@@ -2938,7 +2938,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         gap_events = [item for item in _listify(result.get("candidate_gap_events")) if isinstance(item, dict)]
         for item in gap_events:
             self.logger.info(
-                "[TFI_GAP] round=%s scope_id=%s target_function=%s frontier=%s sink=%s observed_prefix_len=%s agent_guidance_required=%s fuzzer_generation_required=%s",
+                "[TCI_GAP] round=%s scope_id=%s target_function=%s frontier=%s sink=%s observed_prefix_len=%s agent_guidance_required=%s fuzzer_generation_required=%s",
                 round_id,
                 _text(item.get("scope_id")).strip() or "UNKNOWN",
                 _text(item.get("target_function")).strip() or "UNKNOWN",
@@ -2950,17 +2950,17 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             )
         guidance_records = [item for item in _listify(result.get("gap_guidance_records")) if isinstance(item, dict)]
         if isinstance(agent_state, dict) and guidance_records:
-            agent_state["tfi_agent_guidance_count"] = int(agent_state.get("tfi_agent_guidance_count") or 0) + len(guidance_records)
-            agent_state["tfi_guidance_llm_success_count"] = int(
-                agent_state.get("tfi_guidance_llm_success_count") or 0
+            agent_state["tci_agent_guidance_count"] = int(agent_state.get("tci_agent_guidance_count") or 0) + len(guidance_records)
+            agent_state["tci_guidance_llm_success_count"] = int(
+                agent_state.get("tci_guidance_llm_success_count") or 0
             ) + int(result.get("gap_llm_success_count") or 0)
-            agent_state["tfi_guidance_llm_error_count"] = int(
-                agent_state.get("tfi_guidance_llm_error_count") or 0
+            agent_state["tci_guidance_llm_error_count"] = int(
+                agent_state.get("tci_guidance_llm_error_count") or 0
             ) + int(result.get("gap_llm_error_count") or 0)
             env.results["fresh_agent_runtime"] = _agent_runtime_result_payload(agent_state)
         for item in guidance_records:
             self.logger.info(
-                "[AGENT_TFI_GUIDANCE] round=%s scope_id=%s gap_type=%s guidance_generated=%s llm_called=%s fallback_used=%s",
+                "[AGENT_TCI_GUIDANCE] round=%s scope_id=%s gap_type=%s guidance_generated=%s llm_called=%s fallback_used=%s",
                 round_id,
                 _text(item.get("scope_id")).strip() or "UNKNOWN",
                 _text(item.get("gap_type")).strip() or "local_candidate_gap",
@@ -2979,7 +2979,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
                 checkpoint_result = self.checkpoint_guided_runtime.update_and_build(
                     round_id=round_id,
                     events=events,
-                    tfi_candidates=list(candidate_records) + list(useful_records),
+                    tci_candidates=list(candidate_records) + list(useful_records),
                     recent_failed=[],
                 )
                 checkpoint_candidates = [
@@ -3020,11 +3020,11 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
                 useful_reason = _text(item.get("useful_reason")).strip() or "unknown"
                 self.useful_by_reason[useful_reason] = int(self.useful_by_reason.get(useful_reason, 0)) + 1
                 self.logger.info(
-                    "[TFI_SOFT_CAND] candidate_id=%s scope_id=%s candidate_origin=%s generated_under_tfi_constraint=%s from_local_candidate_gap=%s useful_reason=%s path_progress_delta=%s frontier_touched=%s sink_touched=%s priority=low",
+                    "[TCI_SOFT_CAND] candidate_id=%s scope_id=%s candidate_origin=%s generated_under_tci_constraint=%s from_local_candidate_gap=%s useful_reason=%s path_progress_delta=%s frontier_touched=%s sink_touched=%s priority=low",
                     _text(item.get("candidate_id")).strip() or "UNKNOWN",
                     _text(item.get("scope_id")).strip() or "UNKNOWN",
                     _text(item.get("candidate_origin")).strip() or _text(item.get("candidate_source_used")).strip() or "unknown",
-                    int(bool(item.get("generated_under_tfi_constraint"))),
+                    int(bool(item.get("generated_under_tci_constraint"))),
                     int(bool(item.get("metadata", {}).get("from_local_candidate_gap"))) if isinstance(item.get("metadata"), dict) else 0,
                     _text(item.get("useful_reason")).strip() or "unknown",
                     _text(item.get("path_progress_delta")).strip() or "0",
@@ -3032,7 +3032,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
                     int(bool(item.get("sink_touched"))),
                 )
             self.logger.info(
-                "[TFI_AGENT] round=%s tasks_seen=%s candidate_gap_events_seen=%s guidance_generated=%s candidates_built=%s candidates_executed=%s useful_candidates=%s agent_called=%s llm_called=%s fallback_used=%s skipped_reason=%s errors=%s",
+                "[TCI_AGENT] round=%s tasks_seen=%s candidate_gap_events_seen=%s guidance_generated=%s candidates_built=%s candidates_executed=%s useful_candidates=%s agent_called=%s llm_called=%s fallback_used=%s skipped_reason=%s errors=%s",
                 round_id,
                 int(result.get("tasks_seen") or 0),
                 int(result.get("candidate_gap_events_seen") or 0),
@@ -3047,7 +3047,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
                 self.last_error or "none",
             )
             self.logger.info(
-                "[TFI_SOFT_INJECT] round=%s buffer_size=%s injected_count=%s skipped_duplicate_count=%s reason=%s",
+                "[TCI_SOFT_INJECT] round=%s buffer_size=%s injected_count=%s skipped_duplicate_count=%s reason=%s",
                 round_id,
                 len(self.buffer),
                 0,
@@ -3060,7 +3060,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             self._write_guided_summary()
         else:
             self.logger.info(
-                "[TFI_AGENT] round=%s tasks_seen=%s candidate_gap_events_seen=%s guidance_generated=%s candidates_built=%s candidates_executed=%s useful_candidates=%s agent_called=%s llm_called=%s fallback_used=%s skipped_reason=%s errors=%s",
+                "[TCI_AGENT] round=%s tasks_seen=%s candidate_gap_events_seen=%s guidance_generated=%s candidates_built=%s candidates_executed=%s useful_candidates=%s agent_called=%s llm_called=%s fallback_used=%s skipped_reason=%s errors=%s",
                 round_id,
                 int(result.get("tasks_seen") or 0),
                 int(result.get("candidate_gap_events_seen") or 0),
@@ -3084,13 +3084,13 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
                     json.dump(summary, handle, ensure_ascii=True, indent=2)
             env = getattr(engine, "env", None)
             if env is not None and isinstance(getattr(env, "results", None), dict):
-                env.results["target_focus_agent_runtime"] = summary
+                env.results["target_condition_agent_runtime"] = summary
             self._write_guided_summary(summary)
         except Exception:
             pass
 
     def build_summary(self) -> Dict[str, Any]:
-        planning_only = bool(getattr(self.runtime, "tfi_planning_only", False))
+        planning_only = bool(getattr(self.runtime, "tci_planning_only", False))
         injection_enabled = bool(self.enable_guided_candidate_injection or self.enable_checkpoint_guided_injection)
         lifecycle_status = (
             "planning_only"
@@ -3104,7 +3104,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         return {
             "enabled": True,
             "agent_enabled": bool(self.enable_agent),
-            "tfi_planning_only": bool(planning_only),
+            "tci_planning_only": bool(planning_only),
             "candidate_lifecycle_config_status": lifecycle_status,
             "soft_injection_enabled": bool(self.enable_soft_injection),
             "guided_candidate_injection_enabled": bool(self.enable_guided_candidate_injection),
@@ -3125,8 +3125,8 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             "duplicate_skipped_count": int(self.duplicate_skipped_count),
             "guided_candidate_count": int(self.guided_candidate_count),
             "agent_guided_candidate_count": int(self.agent_guided_candidate_count),
-            "tfi_guided_candidate_count": int(self.tfi_guided_candidate_count),
-            "ksi_guided_candidate_count": int(self.ksi_guided_candidate_count),
+            "tci_guided_candidate_count": int(self.tci_guided_candidate_count),
+            "pai_guided_candidate_count": int(self.pai_guided_candidate_count),
             "gei_guided_candidate_count": int(self.gei_guided_candidate_count),
             "checkpoint_guided_built_count": int(self.checkpoint_guided_built_count),
             "checkpoint_guided_injected_count": int(self.checkpoint_guided_injected_count),
@@ -3144,7 +3144,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             "max_injected_per_round": int(self.max_injected_per_round),
             "injection_policy": self.injection_policy,
             "bypasses_normal_population_order": bool(self.bypasses_normal_population_order),
-            "target_focus_runtime_error_count": int(self.agent_error_count),
+            "target_condition_runtime_error_count": int(self.agent_error_count),
             "task_build_attempted": bool(getattr(self.runtime, "last_task_build_result", {})),
             "task_build_status": _text(getattr(self.runtime, "last_task_build_result", {}).get("status")).strip() or None,
             "task_count": int(getattr(self.runtime, "last_task_build_result", {}).get("task_count") or 0),
@@ -3173,29 +3173,29 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         if "checkpoint_guided" in source_text and "agent" in source_text:
             return "agent_initial_path"
         if "checkpoint_guided" in source_text:
-            return "tfi_guidance"
-        if "ksi" in source_text or _clean_list(candidate.get("expected_blockers")):
-            return "ksi_blocker_feedback"
+            return "tci_guidance"
+        if "pai" in source_text or _clean_list(candidate.get("expected_blockers")):
+            return "pai_blocker_feedback"
         if "revision" in source_text:
             return "agent_revision"
         if (
             "llm" in source_text
             or bool(metadata.get("agent_guided"))
-            or (_text(candidate.get("candidate_source_used")).strip() == "tfi_agent_llm")
+            or (_text(candidate.get("candidate_source_used")).strip() == "tci_agent_llm")
         ):
             return "agent_initial_path"
-        return "tfi_guidance"
+        return "tci_guidance"
 
     def _count_guided_source(self, source: str) -> None:
         self.guided_candidate_count += 1
         if source == "agent_initial_path" or source == "agent_revision":
             self.agent_guided_candidate_count += 1
-        elif source == "ksi_blocker_feedback":
-            self.ksi_guided_candidate_count += 1
+        elif source == "pai_blocker_feedback":
+            self.pai_guided_candidate_count += 1
         elif source == "gei_side_path":
             self.gei_guided_candidate_count += 1
         else:
-            self.tfi_guided_candidate_count += 1
+            self.tci_guided_candidate_count += 1
 
     def _candidate_sequence(self, candidate: Dict[str, Any]) -> List[str]:
         for field in ("sequence_skeleton", "candidate_sequence", "guided_sequence", "required_prefix"):
@@ -3327,7 +3327,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         candidates = self.buffer.pop_for_round(limit=self.max_per_round)
         if not candidates:
             self.logger.info(
-                "[TFI_SOFT_INJECT] round=%s buffer_size=%s injected_count=0 skipped_duplicate_count=0 reason=buffer_empty",
+                "[TCI_SOFT_INJECT] round=%s buffer_size=%s injected_count=0 skipped_duplicate_count=0 reason=buffer_empty",
                 round_id,
                 len(self.buffer),
             )
@@ -3335,7 +3335,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
         injector = getattr(self.runtime, "candidate_injector", None)
         if injector is None:
             self.logger.info(
-                "[TFI_SOFT_INJECT] round=%s buffer_size=%s injected_count=0 skipped_duplicate_count=0 reason=soft_injection_pending_no_seed_queue_api",
+                "[TCI_SOFT_INJECT] round=%s buffer_size=%s injected_count=0 skipped_duplicate_count=0 reason=soft_injection_pending_no_seed_queue_api",
                 round_id,
                 len(self.buffer),
             )
@@ -3344,7 +3344,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             inject_result = injector.inject_candidates(candidates, population=population, generation=round_id)
         except Exception as exc:
             self.logger.warning(
-                "[TFI_SOFT_INJECT] round=%s buffer_size=%s injected_count=0 skipped_duplicate_count=0 reason=%s",
+                "[TCI_SOFT_INJECT] round=%s buffer_size=%s injected_count=0 skipped_duplicate_count=0 reason=%s",
                 round_id,
                 len(self.buffer),
                 "soft_injection_error: {}".format(str(exc)),
@@ -3372,7 +3372,7 @@ class TFISoftInjectionAnalysis(OnTheFlyAnalysis):
             if candidate_id not in injected_rank_map:
                 injected_rank_map[candidate_id] = rank
         self.logger.info(
-            "[TFI_SOFT_INJECT] round=%s buffer_size=%s injected_count=%s skipped_duplicate_count=0 reason=%s bypasses_normal_population_order=%s",
+            "[TCI_SOFT_INJECT] round=%s buffer_size=%s injected_count=%s skipped_duplicate_count=0 reason=%s bypasses_normal_population_order=%s",
             round_id,
             len(self.buffer),
             injected_count,
@@ -3708,7 +3708,7 @@ def _write_path_validation_summary(output_dir: str, contract_name: str, summary:
         pass
 
 
-def _write_ksi_summary(output_dir: str, summary: Dict[str, Any]) -> None:
+def _write_pai_summary(output_dir: str, summary: Dict[str, Any]) -> None:
     if not output_dir:
         return
     summary_path = os.path.join(output_dir, "path_validation_summary.json")
@@ -3720,7 +3720,7 @@ def _write_ksi_summary(output_dir: str, summary: Dict[str, Any]) -> None:
                 loaded = json.load(handle)
             if isinstance(loaded, dict):
                 payload = loaded
-        payload["ksi"] = summary
+        payload["pai"] = summary
         with open(summary_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle)
     except Exception:
@@ -3803,7 +3803,7 @@ def _write_soft_guidance_summary(output_dir: str, summary: Dict[str, Any]) -> No
         pass
 
 
-def _write_tfi_focus_summary(output_dir: str, summary: Dict[str, Any]) -> None:
+def _write_tci_focus_summary(output_dir: str, summary: Dict[str, Any]) -> None:
     if not output_dir:
         return
     summary_path = os.path.join(output_dir, "path_validation_summary.json")
@@ -3815,7 +3815,7 @@ def _write_tfi_focus_summary(output_dir: str, summary: Dict[str, Any]) -> None:
                 loaded = json.load(handle)
             if isinstance(loaded, dict):
                 payload = loaded
-        payload["tfi_focus"] = summary
+        payload["tci_focus"] = summary
         with open(summary_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle)
     except Exception:
@@ -3842,12 +3842,12 @@ def _write_agent_planner_summary(output_dir: str, summary: Dict[str, Any]) -> No
 
 
 
-def _merge_ksi_summary(path_validation_summary: Optional[Dict[str, Any]], ksi_summary: Optional[Dict[str, Any]]) -> None:
-    if not isinstance(path_validation_summary, dict) or not isinstance(ksi_summary, dict):
+def _merge_pai_summary(path_validation_summary: Optional[Dict[str, Any]], pai_summary: Optional[Dict[str, Any]]) -> None:
+    if not isinstance(path_validation_summary, dict) or not isinstance(pai_summary, dict):
         return
-    path_validation_summary["ksi_enabled"] = bool(ksi_summary.get("enabled", False))
-    path_validation_summary["ksi_evidence_records"] = int(ksi_summary.get("ksi_evidence_records") or 0)
-    path_validation_summary["ksi_evidence_path"] = ksi_summary.get("ksi_evidence_path")
+    path_validation_summary["pai_enabled"] = bool(pai_summary.get("enabled", False))
+    path_validation_summary["pai_evidence_records"] = int(pai_summary.get("pai_evidence_records") or 0)
+    path_validation_summary["pai_evidence_path"] = pai_summary.get("pai_evidence_path")
 
 
 def _merge_agent_feedback_summary(
@@ -3888,13 +3888,13 @@ def _merge_soft_guidance_summary(
     path_validation_summary["soft_guidance"] = soft_guidance_summary
 
 
-def _merge_tfi_focus_summary(
+def _merge_tci_focus_summary(
     path_validation_summary: Optional[Dict[str, Any]],
-    tfi_focus_summary: Optional[Dict[str, Any]],
+    tci_focus_summary: Optional[Dict[str, Any]],
 ) -> None:
-    if not isinstance(path_validation_summary, dict) or not isinstance(tfi_focus_summary, dict):
+    if not isinstance(path_validation_summary, dict) or not isinstance(tci_focus_summary, dict):
         return
-    path_validation_summary["tfi_focus"] = tfi_focus_summary
+    path_validation_summary["tci_focus"] = tci_focus_summary
 
 
 def _merge_agent_planner_summary(
@@ -4209,15 +4209,15 @@ class Fuzzer:
         engine.analysis.append(RQ1GEISenderPoolRestrictionAnalysis(logger))
         engine.fitness_register(lambda x: fitness_function(x, self.env))
         soft_guidance = None
-        target_focus_soft_injection_analysis = None
+        target_condition_soft_injection_analysis = None
         run_output_dir = getattr(self.args, "run_output_dir", None) or _resolve_run_output_dir(self.args.results)
         EvidencePool(run_output_dir).reset()
         runtime_account_snapshot = _rq1_runtime_account_snapshot(self.env, self.instrumented_evm)
         runtime_deployer_account = _text((runtime_account_snapshot or [None])[0]).strip()
         runtime_llm_provider = None
         if getattr(self.args, "agent_use_llm", False) and (
-            getattr(self.args, "enable_tfi_agent", False)
-            or getattr(self.args, "enable_ksi_llm_feedback", False)
+            getattr(self.args, "enable_tci_agent", False)
+            or getattr(self.args, "enable_pai_llm_feedback", False)
             or getattr(self.args, "enable_agent_effect_repair", False)
             or getattr(self.args, "enable_failure_aware_agent_repair", False)
             or getattr(self.args, "failure_repair_use_agent", False)
@@ -4225,8 +4225,8 @@ class Fuzzer:
             runtime_llm_provider = _build_llm_provider_from_args(self.args)
         if (
             getattr(self.args, "fresh_agent_run", False)
-            or getattr(self.args, "enable_tfi_agent", False)
-            or getattr(self.args, "enable_ksi_llm_feedback", False)
+            or getattr(self.args, "enable_tci_agent", False)
+            or getattr(self.args, "enable_pai_llm_feedback", False)
             or getattr(self.args, "agent_use_llm", False)
         ):
             self.env.fresh_agent_runtime_state = _default_agent_runtime_state(self.args, run_output_dir)
@@ -4250,7 +4250,7 @@ class Fuzzer:
                 max_per_generation=int(getattr(self.args, "path_guidance_max_per_gen", 5) or 5),
                 blocker_evidence_path=getattr(self.args, "soft_guidance_blocker_evidence", None),
                 enable_side_path_guidance=bool(
-                    getattr(self.args, "enable_ksi_evidence", False)
+                    getattr(self.args, "enable_pai_evidence", False)
                     or getattr(self.args, "enable_gei_core", False)
                     or getattr(self.args, "enable_gei_side_path", False)
                 ),
@@ -4258,8 +4258,8 @@ class Fuzzer:
             self.env.soft_guidance = soft_guidance
             engine.analysis.append(SoftGuidanceAnalysis(soft_guidance))
         if (
-            getattr(self.args, "enable_tfi_agent", False)
-            or getattr(self.args, "enable_target_focus_soft_injection", False)
+            getattr(self.args, "enable_tci_agent", False)
+            or getattr(self.args, "enable_target_condition_soft_injection", False)
             or getattr(self.args, "enable_guided_candidate_injection", False)
             or getattr(self.args, "enable_checkpoint_guided_injection", False)
         ):
@@ -4280,63 +4280,63 @@ class Fuzzer:
                 active_agent_llm = bool(
                     getattr(self.args, "agent_use_llm", False)
                     and (
-                        getattr(self.args, "enable_tfi_agent", False)
-                        or getattr(self.args, "enable_ksi_llm_feedback", False)
+                        getattr(self.args, "enable_tci_agent", False)
+                        or getattr(self.args, "enable_pai_llm_feedback", False)
                         or getattr(self.args, "enable_agent_effect_repair", False)
                         or getattr(self.args, "enable_failure_aware_agent_repair", False)
                         or getattr(self.args, "failure_repair_use_agent", False)
                     )
                 )
                 active_soft_injection = bool(
-                    getattr(self.args, "enable_target_focus_soft_injection", False)
+                    getattr(self.args, "enable_target_condition_soft_injection", False)
                     or guided_injection_enabled
                     or checkpoint_guided_enabled
                 )
                 guided_budget = int(
                     (getattr(self.args, "checkpoint_guided_max_per_round", 0) if checkpoint_guided_enabled else 0)
                     or getattr(self.args, "guided_injection_budget_per_round", 0)
-                    or getattr(self.args, "target_focus_soft_injection_max_per_round", 3)
+                    or getattr(self.args, "target_condition_soft_injection_max_per_round", 3)
                     or 3
                 )
                 guided_max_total = int(
                     (max(1, guided_budget) * max(1, int(getattr(self.args, "checkpoint_guided_dedup_window", 100) or 100))
                     if checkpoint_guided_enabled else 0)
                     or getattr(self.args, "guided_injection_max_total", 0)
-                    or getattr(self.args, "target_focus_soft_injection_buffer_size", 64)
+                    or getattr(self.args, "target_condition_soft_injection_buffer_size", 64)
                     or 64
                 )
-                target_focus_runtime = TFIAgentRuntime(
+                target_condition_runtime = TCIAgentRuntime(
                     output_dir=run_output_dir,
                     contract_name=self.contract_name,
                     source_path=getattr(self.args, "source", None),
                     gas_limit=getattr(self.args, "gas_limit", None),
-                    max_tasks_per_round=int(getattr(self.args, "tfi_agent_max_tasks_per_round", 4) or 4),
-                    max_candidates_per_task=int(getattr(self.args, "tfi_agent_max_candidates_per_task", 2) or 2),
+                    max_tasks_per_round=int(getattr(self.args, "tci_agent_max_tasks_per_round", 4) or 4),
+                    max_candidates_per_task=int(getattr(self.args, "tci_agent_max_candidates_per_task", 2) or 2),
                     max_total_candidates=max(
                         guided_max_total if guided_injection_enabled else (
-                            int(getattr(self.args, "tfi_agent_max_tasks_per_round", 4) or 4)
-                            * int(getattr(self.args, "tfi_agent_max_candidates_per_task", 2) or 2)
+                            int(getattr(self.args, "tci_agent_max_tasks_per_round", 4) or 4)
+                            * int(getattr(self.args, "tci_agent_max_candidates_per_task", 2) or 2)
                         ),
                         1,
                     ),
                     enable_agent=active_agent_llm,
                     llm_provider=runtime_llm_provider,
-                    debug_artifacts=bool(getattr(self.args, "enable_tfi_debug_artifacts", False)),
+                    debug_artifacts=bool(getattr(self.args, "enable_tci_debug_artifacts", False)),
                     fresh_run=bool(getattr(self.args, "fresh_agent_run", False)),
                     ignore_precomputed_paths=bool(getattr(self.args, "ignore_precomputed_paths", False)),
-                    ignore_precomputed_tfi_artifacts=bool(getattr(self.args, "ignore_precomputed_tfi_artifacts", False)),
+                    ignore_precomputed_tci_artifacts=bool(getattr(self.args, "ignore_precomputed_tci_artifacts", False)),
                     run_start_time=getattr(self.args, "run_start_time", None),
                     strict_llm_only=bool(
                         getattr(self.args, "fresh_agent_run", False)
-                        and getattr(self.args, "enable_tfi_agent", False)
+                        and getattr(self.args, "enable_tci_agent", False)
                         and getattr(self.args, "agent_use_llm", False)
                     ),
                     phase_cost_env=self.env,
                 )
                 try:
-                    setattr(target_focus_runtime, "env", self.env)
-                    setattr(target_focus_runtime, "tfi_planning_only", bool(getattr(self.args, "tfi_planning_only", False)))
-                    setattr(target_focus_runtime, "binding_only", True)
+                    setattr(target_condition_runtime, "env", self.env)
+                    setattr(target_condition_runtime, "tci_planning_only", bool(getattr(self.args, "tci_planning_only", False)))
+                    setattr(target_condition_runtime, "binding_only", True)
                 except Exception:
                     pass
                 checkpoint_runtime = None
@@ -4395,18 +4395,18 @@ class Fuzzer:
                         phase_cost_env=self.env,
                         rq1_rescue_mode=bool(int(getattr(self.args, "rq1_t_sec", 0) or 0) > 0),
                     )
-                tfi_soft_buffer = TFICandidateBuffer(
-                    max_size=guided_max_total if guided_injection_enabled else int(getattr(self.args, "target_focus_soft_injection_buffer_size", 64) or 64),
-                    max_per_round=guided_budget if guided_injection_enabled else int(getattr(self.args, "target_focus_soft_injection_max_per_round", 3) or 3),
+                tci_soft_buffer = TCICandidateBuffer(
+                    max_size=guided_max_total if guided_injection_enabled else int(getattr(self.args, "target_condition_soft_injection_buffer_size", 64) or 64),
+                    max_per_round=guided_budget if guided_injection_enabled else int(getattr(self.args, "target_condition_soft_injection_max_per_round", 3) or 3),
                     min_useful_score=1,
                     confidence_threshold=float(getattr(self.args, "guided_injection_confidence_threshold", 0.0) or 0.0),
                 )
-                target_focus_soft_injection_analysis = TFISoftInjectionAnalysis(
-                    runtime=target_focus_runtime,
-                    buffer=tfi_soft_buffer,
+                target_condition_soft_injection_analysis = TCISoftInjectionAnalysis(
+                    runtime=target_condition_runtime,
+                    buffer=tci_soft_buffer,
                     logger=logger,
-                    interval=int(getattr(self.args, "tfi_agent_interval", 20) or 20),
-                    max_per_round=guided_budget if guided_injection_enabled else int(getattr(self.args, "target_focus_soft_injection_max_per_round", 3) or 3),
+                    interval=int(getattr(self.args, "tci_agent_interval", 20) or 20),
+                    max_per_round=guided_budget if guided_injection_enabled else int(getattr(self.args, "target_condition_soft_injection_max_per_round", 3) or 3),
                     enable_agent=active_agent_llm,
                     enable_soft_injection=active_soft_injection,
                     enable_guided_candidate_injection=guided_injection_enabled,
@@ -4416,19 +4416,19 @@ class Fuzzer:
                     checkpoint_guided_runtime=checkpoint_runtime,
                     enable_checkpoint_guided_injection=checkpoint_guided_enabled,
                 )
-                self.env.target_focus_agent_runtime = target_focus_runtime
+                self.env.target_condition_agent_runtime = target_condition_runtime
                 self.env.checkpoint_guided_runtime = checkpoint_runtime
-                self.env.target_focus_soft_injection_buffer = tfi_soft_buffer
-                engine.analysis.append(target_focus_soft_injection_analysis)
+                self.env.target_condition_soft_injection_buffer = tci_soft_buffer
+                engine.analysis.append(target_condition_soft_injection_analysis)
             except Exception as exc:
-                self.env.results["target_focus_agent_runtime"] = {
+                self.env.results["target_condition_agent_runtime"] = {
                     "enabled": False,
-                    "agent_enabled": bool(getattr(self.args, "enable_tfi_agent", False)),
-                    "tfi_planning_only": bool(getattr(self.args, "tfi_planning_only", False)),
+                    "agent_enabled": bool(getattr(self.args, "enable_tci_agent", False)),
+                    "tci_planning_only": bool(getattr(self.args, "tci_planning_only", False)),
                     "candidate_lifecycle_config_status": (
                         "planning_only"
                         if (
-                            bool(getattr(self.args, "tfi_planning_only", False))
+                            bool(getattr(self.args, "tci_planning_only", False))
                             and not bool(getattr(self.args, "enable_guided_candidate_injection", False))
                             and not bool(getattr(self.args, "enable_checkpoint_guided_injection", False))
                         )
@@ -4442,7 +4442,7 @@ class Fuzzer:
                         )
                     ),
                     "soft_injection_enabled": bool(
-                        getattr(self.args, "enable_target_focus_soft_injection", False)
+                        getattr(self.args, "enable_target_condition_soft_injection", False)
                         or getattr(self.args, "enable_guided_candidate_injection", False)
                         or getattr(self.args, "enable_checkpoint_guided_injection", False)
                     ),
@@ -4458,7 +4458,7 @@ class Fuzzer:
                     "no_generator_mutation_crossover_selection_change": True,
                     "llm_called": False,
                     "rag_used": False,
-                    "error": "target_focus_runtime_init_failed: {}".format(str(exc)),
+                    "error": "target_condition_runtime_init_failed: {}".format(str(exc)),
                 }
         engine.analysis.append(ExecutionTraceAnalyzer(self.env))
 
@@ -4480,8 +4480,8 @@ class Fuzzer:
         if (
             getattr(self.args, "fresh_agent_run", False)
             and (
-                getattr(self.args, "enable_tfi_agent", False)
-                or getattr(self.args, "enable_ksi_llm_feedback", False)
+                getattr(self.args, "enable_tci_agent", False)
+                or getattr(self.args, "enable_pai_llm_feedback", False)
             )
         ):
             warmup_state = _ensure_gei60_state(self.env, self.args)
@@ -4524,13 +4524,13 @@ class Fuzzer:
             )
             self.env.path_progress_tracker = path_progress_tracker
 
-        ksi_runtime = None
-        if getattr(self.args, "enable_ksi_evidence", False):
-            ksi_runtime = KSIRuntime(
+        pai_runtime = None
+        if getattr(self.args, "enable_pai_evidence", False):
+            pai_runtime = PAIRuntime(
                 output_dir=run_output_dir,
-                enabled=bool(getattr(self.args, "enable_ksi_evidence", False)),
+                enabled=bool(getattr(self.args, "enable_pai_evidence", False)),
             )
-            self.env.ksi_runtime = ksi_runtime
+            self.env.pai_runtime = pai_runtime
 
         gei_side_path_recorder = None
         if getattr(self.args, "enable_gei_core", False):
@@ -4557,12 +4557,12 @@ class Fuzzer:
         except Exception:
             pass
 
-        if getattr(self.args, "enable_tfi_agent", False) or getattr(self.args, "enable_ksi_llm_feedback", False):
+        if getattr(self.args, "enable_tci_agent", False) or getattr(self.args, "enable_pai_llm_feedback", False):
             engine.analysis.append(
-                AgentKSIFeedbackAnalysis(
+                AgentPAIFeedbackAnalysis(
                     logger=logger,
                     llm_provider=runtime_llm_provider,
-                    interval=int(getattr(self.args, "tfi_agent_interval", 20) or 20),
+                    interval=int(getattr(self.args, "tci_agent_interval", 20) or 20),
                 )
             )
 
@@ -4595,8 +4595,8 @@ class Fuzzer:
                     "observation_count": 0,
                     "side_path_candidate_count": 0,
                     "input_source": "disabled",
-                    "ksi_required": False,
-                    "ksi_enrichment_used": False,
+                    "pai_required": False,
+                    "pai_enrichment_used": False,
                     "coverage_delta_sum": 0.0,
                     "revert_count": 0,
                     "reason": "gei_core_init_failed",
@@ -4612,9 +4612,9 @@ class Fuzzer:
             except Exception:
                 pass
 
-        if target_focus_soft_injection_analysis is not None:
+        if target_condition_soft_injection_analysis is not None:
             try:
-                self.env.results["target_focus_agent_runtime"] = target_focus_soft_injection_analysis.build_summary()
+                self.env.results["target_condition_agent_runtime"] = target_condition_soft_injection_analysis.build_summary()
             except Exception:
                 pass
 
@@ -4639,8 +4639,8 @@ class Fuzzer:
         if path_progress_tracker is not None:
             try:
                 path_validation_summary = path_progress_tracker.get_summary()
-                if ksi_runtime is not None:
-                    _merge_ksi_summary(path_validation_summary, ksi_runtime.get_summary())
+                if pai_runtime is not None:
+                    _merge_pai_summary(path_validation_summary, pai_runtime.get_summary())
                 if agent_feedback_summary is not None:
                     _merge_agent_feedback_summary(path_validation_summary, agent_feedback_summary)
                 if gei_side_path_summary is not None:
@@ -4656,12 +4656,12 @@ class Fuzzer:
                     )
             except Exception:
                 pass
-        if ksi_runtime is not None and path_progress_tracker is None:
+        if pai_runtime is not None and path_progress_tracker is None:
             try:
-                ksi_summary = ksi_runtime.get_summary()
-                self.env.results["ksi"] = ksi_summary
+                pai_summary = pai_runtime.get_summary()
+                self.env.results["pai"] = pai_summary
                 if _should_write_path_validation_sidecar(self.args.results):
-                    _write_ksi_summary(run_output_dir, ksi_summary)
+                    _write_pai_summary(run_output_dir, pai_summary)
             except Exception:
                 pass
         if gei_side_path_summary is not None and path_progress_tracker is None:
@@ -4682,25 +4682,25 @@ class Fuzzer:
                     _write_soft_guidance_summary(run_output_dir, soft_guidance_summary)
             except Exception:
                 pass
-        tfi_focus_summary = None
-        if getattr(self.args, "enable_tfi_focus", False):
+        tci_focus_summary = None
+        if getattr(self.args, "enable_tci_focus", False):
             try:
                 default_blocker_path = None
                 if isinstance(agent_feedback_summary, dict):
                     default_blocker_path = agent_feedback_summary.get("blocker_evidence_path")
-                target_focus_runtime = TFIRuntime(
+                target_condition_runtime = TCIRuntime(
                     output_dir=run_output_dir,
                     enabled=True,
-                    blocker_evidence_path=getattr(self.args, "tfi_blocker_evidence", None) or default_blocker_path,
-                    min_blocked_count=int(getattr(self.args, "tfi_min_blocked_count", 3) or 3),
-                    min_sink_reverted_count=int(getattr(self.args, "tfi_min_sink_reverted_count", 1) or 1),
+                    blocker_evidence_path=getattr(self.args, "tci_blocker_evidence", None) or default_blocker_path,
+                    min_blocked_count=int(getattr(self.args, "tci_min_blocked_count", 3) or 3),
+                    min_sink_reverted_count=int(getattr(self.args, "tci_min_sink_reverted_count", 1) or 1),
                 )
-                tfi_focus_summary = target_focus_runtime.run()
-                self.env.results["tfi_focus"] = tfi_focus_summary
+                tci_focus_summary = target_condition_runtime.run()
+                self.env.results["tci_focus"] = tci_focus_summary
                 if isinstance(self.env.results.get("path_validation"), dict):
-                    _merge_tfi_focus_summary(
+                    _merge_tci_focus_summary(
                         self.env.results["path_validation"],
-                        tfi_focus_summary,
+                        tci_focus_summary,
                     )
                     if _should_write_path_validation_sidecar(self.args.results):
                         _write_path_validation_summary(
@@ -4709,22 +4709,22 @@ class Fuzzer:
                             self.env.results["path_validation"],
                         )
                 elif _should_write_path_validation_sidecar(self.args.results):
-                    _write_tfi_focus_summary(run_output_dir, tfi_focus_summary)
+                    _write_tci_focus_summary(run_output_dir, tci_focus_summary)
             except Exception:
-                tfi_focus_summary = {
+                tci_focus_summary = {
                     "enabled": True,
                     "target_count": 0,
                     "priority_counts": {"high": 0, "medium": 0, "low": 0},
                     "focus_type_counts": {},
                     "top_focus_functions": {},
-                    "output_path": os.path.join(run_output_dir, "tfi_focus_targets.jsonl") if run_output_dir else None,
-                    "summary_path": os.path.join(run_output_dir, "tfi_focus_summary.json") if run_output_dir else None,
-                    "blocker_evidence_path": getattr(self.args, "tfi_blocker_evidence", None) or (
+                    "output_path": os.path.join(run_output_dir, "tci_focus_targets.jsonl") if run_output_dir else None,
+                    "summary_path": os.path.join(run_output_dir, "tci_focus_summary.json") if run_output_dir else None,
+                    "blocker_evidence_path": getattr(self.args, "tci_blocker_evidence", None) or (
                         agent_feedback_summary.get("blocker_evidence_path") if isinstance(agent_feedback_summary, dict) else None
                     ),
                     "blocker_evidence_loaded": False,
                 }
-                self.env.results["tfi_focus"] = tfi_focus_summary
+                self.env.results["tci_focus"] = tci_focus_summary
 
         side_path_plan_export_summary = None
         if getattr(self.args, "export_side_path_plan", False):
@@ -4765,8 +4765,8 @@ class Fuzzer:
                 default_blocker_path = getattr(self.args, "agent_blocker_evidence", None) or (
                     agent_feedback_summary.get("blocker_evidence_path") if isinstance(agent_feedback_summary, dict) else None
                 )
-                default_tfi_path = getattr(self.args, "agent_tfi_focus", None) or (
-                    tfi_focus_summary.get("output_path") if isinstance(tfi_focus_summary, dict) else None
+                default_tci_path = getattr(self.args, "agent_tci_focus", None) or (
+                    tci_focus_summary.get("output_path") if isinstance(tci_focus_summary, dict) else None
                 )
                 default_shortlist_path = getattr(self.args, "agent_side_path_shortlist", None) or (
                     os.path.join(run_output_dir, "side_path_shortlist.json") if run_output_dir else None
@@ -4795,7 +4795,7 @@ class Fuzzer:
                 planner = AgentPlanner(
                     output_dir=run_output_dir,
                     blocker_evidence_path=default_blocker_path,
-                    tfi_focus_path=default_tfi_path,
+                    tci_focus_path=default_tci_path,
                     side_path_shortlist_path=default_shortlist_path,
                     proposed_path_plan_path=default_proposed_plan_path,
                     max_hypotheses=int(getattr(self.args, "agent_max_hypotheses", 20) or 20),
@@ -4850,13 +4850,13 @@ class Fuzzer:
                     "summary_path": os.path.join(run_output_dir, "agent_plan_summary.json") if run_output_dir else None,
                     "hypothesis_count": 0,
                     "source_counts": {
-                        "tfi_focus": 0,
+                        "tci_focus": 0,
                         "blocker_evidence": 0,
                         "side_path_shortlist": 0,
                     },
                     "loaded_inputs": {
                         "blocker_evidence": False,
-                        "tfi_focus": False,
+                        "tci_focus": False,
                         "side_path_shortlist": False,
                         "proposed_path_plan": False,
                     },
@@ -4877,8 +4877,8 @@ class Fuzzer:
                 default_repair_blocker_path = getattr(self.args, "repair_blocker_evidence", None) or (
                     agent_feedback_summary.get("blocker_evidence_path") if isinstance(agent_feedback_summary, dict) else None
                 )
-                default_repair_tfi_path = getattr(self.args, "repair_tfi_focus", None) or (
-                    tfi_focus_summary.get("output_path") if isinstance(tfi_focus_summary, dict) else None
+                default_repair_tci_path = getattr(self.args, "repair_tci_focus", None) or (
+                    tci_focus_summary.get("output_path") if isinstance(tci_focus_summary, dict) else None
                 )
                 default_repair_path_plan = getattr(self.args, "repair_path_plan", None) or (
                     agent_planner_summary.get("output_path") if isinstance(agent_planner_summary, dict) else None
@@ -4887,8 +4887,8 @@ class Fuzzer:
                 diagnosis_builder = RepairDiagnosisBuilder(
                     output_dir=run_output_dir,
                     blocker_evidence_path=default_repair_blocker_path,
-                    ksi_evidence_path=getattr(self.args, "repair_ksi_evidence", None),
-                    tfi_focus_path=default_repair_tfi_path,
+                    pai_evidence_path=getattr(self.args, "repair_pai_evidence", None),
+                    tci_focus_path=default_repair_tci_path,
                     agent_path_plan_path=default_repair_path_plan,
                 )
                 diagnoses = diagnosis_builder.build_diagnoses()
@@ -4927,8 +4927,8 @@ class Fuzzer:
                     "top_target_functions": {},
                     "loaded_inputs": {
                         "blocker_evidence": False,
-                        "ksi_evidence": False,
-                        "tfi_focus": False,
+                        "pai_evidence": False,
+                        "tci_focus": False,
                         "path_plan": False,
                     },
                     "output_paths": {
@@ -5015,8 +5015,8 @@ def _apply_described_public_workflow(args: Any) -> None:
     args.wall_snapshot_sec = None
     args.path_plan = None
     args.enable_path_validation = False
-    args.enable_ksi_evidence = True
-    args.enable_ksi_llm_feedback = True
+    args.enable_pai_evidence = True
+    args.enable_pai_llm_feedback = True
     args.enable_gei_core = True
     args.disable_gei_core = False
     args.enable_gei_side_path = True
@@ -5025,29 +5025,29 @@ def _apply_described_public_workflow(args: Any) -> None:
     args.path_guidance_ratio = 0.0
     args.path_guidance_max_per_gen = 0
     args.soft_guidance_blocker_evidence = None
-    args.enable_tfi_focus = True
-    args.tfi_min_blocked_count = 3
-    args.tfi_min_sink_reverted_count = 1
-    args.tfi_blocker_evidence = None
+    args.enable_tci_focus = True
+    args.tci_min_blocked_count = 3
+    args.tci_min_sink_reverted_count = 1
+    args.tci_blocker_evidence = None
     args.enable_agent_planner = False
     args.agent_blocker_evidence = None
-    args.agent_tfi_focus = None
+    args.agent_tci_focus = None
     args.agent_side_path_shortlist = None
     args.agent_proposed_path_plan = None
     args.agent_max_hypotheses = 20
     args.agent_planner_mode = "deterministic"
     args.enable_guided_sequence_generation = False
     args.repair_blocker_evidence = None
-    args.repair_ksi_evidence = None
-    args.repair_tfi_focus = None
+    args.repair_pai_evidence = None
+    args.repair_tci_focus = None
     args.repair_path_plan = None
     args.repair_max_candidates_per_hypothesis = 5
-    args.enable_tfi_agent = True
+    args.enable_tci_agent = True
     args.fresh_agent_run = True
-    args.tfi_planning_only = False
+    args.tci_planning_only = False
     args.ignore_precomputed_paths = True
-    args.ignore_precomputed_tfi_artifacts = True
-    args.enable_target_focus_soft_injection = True
+    args.ignore_precomputed_tci_artifacts = True
+    args.enable_target_condition_soft_injection = True
     args.enable_guided_candidate_injection = False
     args.guided_injection_budget_per_round = 3
     args.guided_injection_max_total = 64
@@ -5085,16 +5085,16 @@ def _apply_described_public_workflow(args: Any) -> None:
     args.audit_l2_condition = None
     args.audit_l3_condition = None
     args.audit_required_trace_evidence = None
-    args.tfi_agent_interval = 20
-    args.tfi_agent_max_tasks_per_round = 4
-    args.tfi_agent_max_candidates_per_task = 2
-    args.target_focus_soft_injection_max_per_round = 3
-    args.target_focus_soft_injection_buffer_size = 64
-    args.enable_tfi_debug_artifacts = False
+    args.tci_agent_interval = 20
+    args.tci_agent_max_tasks_per_round = 4
+    args.tci_agent_max_candidates_per_task = 2
+    args.target_condition_soft_injection_max_per_round = 3
+    args.target_condition_soft_injection_buffer_size = 64
+    args.enable_tci_debug_artifacts = False
     args.enable_stage = False
     args.legacy_search_only = False
     args.force_gei_only = False
-    args.max_stage = "ksi"
+    args.max_stage = "pai"
     args.stage_log = None
     args.min_gei_generations = 2
     args.stagnation_window = 2
@@ -5121,7 +5121,7 @@ def main():
                 "out_fresh_agent_runtime_{}".format(timestamp),
             )
         args.ignore_precomputed_paths = True
-        args.ignore_precomputed_tfi_artifacts = True
+        args.ignore_precomputed_tci_artifacts = True
 
     gei_core_requested = bool(
         getattr(args, "enable_gei_core", False)
@@ -5132,14 +5132,14 @@ def main():
     args.enable_gei_core = gei_core_requested
     args.enable_gei_side_path = gei_core_requested
 
-    target_focus_runtime_requested = bool(
-        getattr(args, "enable_tfi_agent", False)
-        or getattr(args, "enable_target_focus_soft_injection", False)
+    target_condition_runtime_requested = bool(
+        getattr(args, "enable_tci_agent", False)
+        or getattr(args, "enable_target_condition_soft_injection", False)
         or getattr(args, "enable_guided_candidate_injection", False)
         or getattr(args, "enable_checkpoint_guided_injection", False)
     )
-    if target_focus_runtime_requested:
-        args.enable_ksi_evidence = True
+    if target_condition_runtime_requested:
+        args.enable_pai_evidence = True
         args.enable_gei_core = True
         args.enable_gei_side_path = True
         run_output_dir = _resolve_run_output_dir(args.results)
@@ -5156,12 +5156,12 @@ def main():
     if (
         args.path_plan
         or args.enable_path_validation
-        or args.enable_ksi_evidence
+        or args.enable_pai_evidence
         or args.enable_gei_core
         or args.enable_soft_path_guidance
         or args.enable_guided_sequence_generation
         or args.enable_agent_planner
-        or target_focus_runtime_requested
+        or target_condition_runtime_requested
     ):
         args.run_output_dir = _resolve_run_output_dir(args.results)
         args.path_plan_data = load_path_plan(args.path_plan) if getattr(args, "path_plan", None) else PathPlan()

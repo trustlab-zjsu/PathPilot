@@ -2563,7 +2563,7 @@ class CheckpointGuidedRuntime:
         *,
         round_id: int,
         events: Sequence[Dict[str, Any]],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
         recent_failed: Sequence[Dict[str, Any]] = (),
     ) -> Dict[str, Any]:
         observed, snapshot, trigger_reason, _ = self._observe_progress(round_id=round_id, events=events)
@@ -2577,17 +2577,17 @@ class CheckpointGuidedRuntime:
             return {"candidates": [], "trigger_reason": trigger_reason, "progress_snapshot": snapshot}
         built: List[Dict[str, Any]] = []
         if self.rq1_rescue_mode:
-            built.extend(self._build_mapping_candidates(next_missing, observed, tfi_candidates))
+            built.extend(self._build_mapping_candidates(next_missing, observed, tci_candidates))
             if self.enable_effect_forcing_v3:
-                built.extend(self._build_effect_forcing_candidates(next_missing, observed, tfi_candidates, recent_failed))
+                built.extend(self._build_effect_forcing_candidates(next_missing, observed, tci_candidates, recent_failed))
             if self.enable_agent and self._rq1_rescue_agent_needed(next_missing, built):
-                built.extend(self._build_agent_candidates(next_missing, observed, tfi_candidates, recent_failed))
+                built.extend(self._build_agent_candidates(next_missing, observed, tci_candidates, recent_failed))
         else:
             if self.enable_agent:
-                built.extend(self._build_agent_candidates(next_missing, observed, tfi_candidates, recent_failed))
-            built.extend(self._build_mapping_candidates(next_missing, observed, tfi_candidates))
+                built.extend(self._build_agent_candidates(next_missing, observed, tci_candidates, recent_failed))
+            built.extend(self._build_mapping_candidates(next_missing, observed, tci_candidates))
             if self.enable_effect_forcing_v3:
-                built.extend(self._build_effect_forcing_candidates(next_missing, observed, tfi_candidates, recent_failed))
+                built.extend(self._build_effect_forcing_candidates(next_missing, observed, tci_candidates, recent_failed))
         if self.enable_failure_repair_pipeline:
             built = self._apply_failure_repair_priority(built)
         if self.rq1_rescue_mode:
@@ -3179,7 +3179,7 @@ class CheckpointGuidedRuntime:
         self,
         next_missing: str,
         observed: Dict[str, Any],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         mapping = ACTION_MAPPING.get(self.runtime_pattern_family, {}).get(next_missing)
         if not mapping:
@@ -3194,7 +3194,7 @@ class CheckpointGuidedRuntime:
         if not selected_functions:
             self.no_candidate_reasons["no_abi_function_matches_checkpoint_mapping"] += 1
             return []
-        source_candidates = [item for item in tfi_candidates if isinstance(item, dict)]
+        source_candidates = [item for item in tci_candidates if isinstance(item, dict)]
         built: List[Dict[str, Any]] = []
         if self._access_control_profile_active_for_candidate(observed):
             base_sequences = self._unique_sequences(
@@ -3220,7 +3220,7 @@ class CheckpointGuidedRuntime:
                     mapping_variants.append(variant)
             for variant_index, mapping_variant in enumerate(mapping_variants[:3], start=1):
                 candidate = self._new_candidate(
-                    source="tfi",
+                    source="tci",
                     next_missing=next_missing,
                     mapping=mapping_variant,
                     sequence=sequence,
@@ -3247,7 +3247,7 @@ class CheckpointGuidedRuntime:
         self,
         next_missing: str,
         observed: Dict[str, Any],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
         recent_failed: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         if not self.llm_provider or not getattr(self.llm_provider, "is_available", lambda: False)():
@@ -3256,7 +3256,7 @@ class CheckpointGuidedRuntime:
         if not getattr(self.llm_provider, "is_configured", lambda: False)():
             self.no_candidate_reasons["agent_provider_not_configured"] += 1
             return []
-        prompt = self._agent_prompt(next_missing, observed, tfi_candidates, recent_failed)
+        prompt = self._agent_prompt(next_missing, observed, tci_candidates, recent_failed)
         started = time.time()
         self.llm_call_count += 1
         try:
@@ -3345,7 +3345,7 @@ class CheckpointGuidedRuntime:
         self,
         next_missing: str,
         observed: Dict[str, Any],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
         recent_failed: Sequence[Dict[str, Any]],
     ) -> str:
         runtime_goal = self._runtime_goal_for_missing_checkpoint(next_missing, observed)
@@ -3409,21 +3409,21 @@ class CheckpointGuidedRuntime:
         self,
         next_missing: str,
         observed: Dict[str, Any],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
         recent_failed: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         built: List[Dict[str, Any]] = []
         prestate_plans: List[Dict[str, Any]] = []
         if self.enable_prestate_builder:
-            prestate_plans = self._build_prestate_plans(next_missing, observed, tfi_candidates)
+            prestate_plans = self._build_prestate_plans(next_missing, observed, tci_candidates)
             for plan in prestate_plans:
                 _append_jsonl(self.prestate_candidates_path, plan)
         if self.enable_prefix_replay_suffix_mutation:
-            built.extend(self._build_prefix_replay_candidates(next_missing, observed, prestate_plans, tfi_candidates))
+            built.extend(self._build_prefix_replay_candidates(next_missing, observed, prestate_plans, tci_candidates))
         elif self.enable_prestate_builder:
             built.extend(self._build_prestate_candidates(next_missing, observed, prestate_plans))
         if self.enable_agent_effect_repair:
-            built.extend(self._build_agent_effect_repair_candidates(next_missing, observed, tfi_candidates, recent_failed, prestate_plans))
+            built.extend(self._build_agent_effect_repair_candidates(next_missing, observed, tci_candidates, recent_failed, prestate_plans))
         if self.enable_failure_repair_pipeline:
             built.extend(self._build_failure_repair_candidates(next_missing, observed))
         return built
@@ -3456,7 +3456,7 @@ class CheckpointGuidedRuntime:
         self,
         next_missing: str,
         observed: Dict[str, Any],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         mapping = ACTION_MAPPING.get(self.runtime_pattern_family, {}).get(next_missing, {})
         selected = self._select_effect_functions(next_missing, observed, mapping)
@@ -3464,7 +3464,7 @@ class CheckpointGuidedRuntime:
             self.prestate_summary["no_candidate"] += 1
             self.no_candidate_reasons["prestate_builder_no_abi_function"] += 1
             return []
-        source_prefix = self._best_prefix_from_context(observed, tfi_candidates)
+        source_prefix = self._best_prefix_from_context(observed, tci_candidates)
         plans: List[Dict[str, Any]] = []
         for index, sequence in enumerate(selected[: max(1, self.max_per_round * 2)], start=1):
             required_prefix = list(sequence[:-1]) if len(sequence) > 1 else []
@@ -4563,7 +4563,7 @@ class CheckpointGuidedRuntime:
             if not sequence:
                 continue
             candidate = self._new_candidate(
-                source="tfi",
+                source="tci",
                 next_missing=next_missing,
                 mapping=mapping,
                 sequence=sequence,
@@ -4591,13 +4591,13 @@ class CheckpointGuidedRuntime:
         next_missing: str,
         observed: Dict[str, Any],
         prestate_plans: Sequence[Dict[str, Any]],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         built: List[Dict[str, Any]] = []
         mapping = ACTION_MAPPING.get(self.runtime_pattern_family, {}).get(next_missing, {"goal": "effect forcing prefix replay"})
         if not prestate_plans and self.enable_prestate_builder:
             self.prefix_summary["missing_prestate_plan"] += 1
-        source_prefix = self._best_prefix_from_context(observed, tfi_candidates)
+        source_prefix = self._best_prefix_from_context(observed, tci_candidates)
         for plan in prestate_plans:
             plan_sequence = _clean_list(plan.get("function_sequence"))
             suffixes = self._suffix_mutations(next_missing, plan_sequence, observed)
@@ -4609,7 +4609,7 @@ class CheckpointGuidedRuntime:
                 if not sequence:
                     continue
                 candidate = self._new_candidate(
-                    source="tfi",
+                    source="tci",
                     next_missing=next_missing,
                     mapping=mapping,
                     sequence=sequence,
@@ -4794,7 +4794,7 @@ class CheckpointGuidedRuntime:
             "path_progress_delta": 1,
             "frontier_touched": True,
             "sink_touched": bool(len(clean_sequence) > 1),
-            "generated_under_tfi_constraint": True,
+            "generated_under_tci_constraint": True,
             "priority": "checkpoint",
             "do_not_bypass_normal_selection": True,
             "metadata": {
@@ -4859,11 +4859,11 @@ class CheckpointGuidedRuntime:
             allow_llm_hypothesis=True,
         )
 
-    def _best_prefix_from_context(self, observed: Dict[str, Any], tfi_candidates: Sequence[Dict[str, Any]]) -> List[str]:
+    def _best_prefix_from_context(self, observed: Dict[str, Any], tci_candidates: Sequence[Dict[str, Any]]) -> List[str]:
         best = _clean_list(self.progress.best_prefix_sequence)
         if best:
             return best
-        for candidate in tfi_candidates:
+        for candidate in tci_candidates:
             if not isinstance(candidate, dict):
                 continue
             sequence = _clean_list(candidate.get("guided_sequence")) or _clean_list(candidate.get("candidate_sequence"))
@@ -5183,7 +5183,7 @@ class CheckpointGuidedRuntime:
         self,
         next_missing: str,
         observed: Dict[str, Any],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
         recent_failed: Sequence[Dict[str, Any]],
         prestate_plans: Sequence[Dict[str, Any]],
     ) -> str:
@@ -5191,7 +5191,7 @@ class CheckpointGuidedRuntime:
             {
                 "task": "effect_forcing_repair_candidate",
                 "current_best_level": self.progress.best_level,
-                "current_best_prefix": self._best_prefix_from_context(observed, tfi_candidates),
+                "current_best_prefix": self._best_prefix_from_context(observed, tci_candidates),
                 "covered_checkpoints": sorted(self.progress.covered),
                 "next_missing_checkpoint": next_missing,
                 "runtime_pattern_family": self.runtime_pattern_family,
@@ -6880,7 +6880,7 @@ class CheckpointGuidedRuntime:
         sequence = self._merge_prefix_suffix(required_prefix, suffix_actions)
         mapping = ACTION_MAPPING.get(self.runtime_pattern_family, {}).get(target_missing, {"goal": "failure aware repair"})
         candidate = self._new_candidate(
-            source="agent" if self.failure_repair_use_agent else "tfi",
+            source="agent" if self.failure_repair_use_agent else "tci",
             next_missing=target_missing,
             mapping=mapping,
             sequence=sequence,
@@ -7944,7 +7944,7 @@ class CheckpointGuidedRuntime:
         self,
         next_missing: str,
         observed: Dict[str, Any],
-        tfi_candidates: Sequence[Dict[str, Any]],
+        tci_candidates: Sequence[Dict[str, Any]],
         recent_failed: Sequence[Dict[str, Any]],
         prestate_plans: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
@@ -7954,7 +7954,7 @@ class CheckpointGuidedRuntime:
         if not getattr(self.llm_provider, "is_configured", lambda: False)():
             self.agent_repair_summary["provider_not_configured"] += 1
             return []
-        prompt = self._agent_effect_repair_prompt(next_missing, observed, tfi_candidates, recent_failed, prestate_plans)
+        prompt = self._agent_effect_repair_prompt(next_missing, observed, tci_candidates, recent_failed, prestate_plans)
         started = time.time()
         self.llm_call_count += 1
         try:
@@ -8344,7 +8344,7 @@ class CheckpointGuidedRuntime:
                 continue
             modules = set(_clean_list(candidate.get("modules_used")))
             source = _text(candidate.get("source")).strip()
-            if source != "tfi" and not modules.intersection(effect_modules):
+            if source != "tci" and not modules.intersection(effect_modules):
                 continue
             self._bump_pipeline_counter("no_delta_candidate_detected", 1)
             self._bump_pipeline_counter("failure_signature_attempted", 1)

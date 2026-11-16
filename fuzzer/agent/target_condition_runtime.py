@@ -13,7 +13,7 @@ PRIORITY_RANK = {
 }
 
 
-class TFIRuntime:
+class TCIRuntime:
     def __init__(
         self,
         output_dir: str,
@@ -23,8 +23,8 @@ class TFIRuntime:
         min_sink_reverted_count: int = 1,
     ):
         self.output_dir = os.path.abspath(output_dir) if output_dir else ""
-        self.targets_path = os.path.join(self.output_dir, "tfi_focus_targets.jsonl") if self.output_dir else ""
-        self.summary_path = os.path.join(self.output_dir, "tfi_focus_summary.json") if self.output_dir else ""
+        self.targets_path = os.path.join(self.output_dir, "tci_focus_targets.jsonl") if self.output_dir else ""
+        self.summary_path = os.path.join(self.output_dir, "tci_focus_summary.json") if self.output_dir else ""
         self._requested_blocker_evidence_path = os.path.abspath(blocker_evidence_path) if blocker_evidence_path else None
         self._default_blocker_evidence_path = os.path.join(self.output_dir, "blocker_evidence.json") if self.output_dir else ""
         self.blocker_evidence_path = self._requested_blocker_evidence_path or self._default_blocker_evidence_path or None

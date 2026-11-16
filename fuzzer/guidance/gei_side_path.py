@@ -177,7 +177,7 @@ class GEISidePathRecorder:
         self.observation_count = 0
         self.coverage_delta_sum = 0.0
         self.revert_count = 0
-        self.ksi_enrichment_used = False
+        self.pai_enrichment_used = False
         self.source_counts: Counter = Counter()
         self.default_input_source = "gei_core_observation"
         self._candidates: List[Dict[str, Any]] = []
@@ -192,18 +192,18 @@ class GEISidePathRecorder:
             except Exception:
                 self.enabled = False
 
-    def record_from_ksi(self, ksi_record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def record_from_pai(self, pai_record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return self.record_from_observation(
-            ksi_record,
-            source="legacy_ksi_record",
-            ksi_enrichment_used=True,
+            pai_record,
+            source="legacy_pai_record",
+            pai_enrichment_used=True,
         )
 
     def record_from_observation(
         self,
         observation: Dict[str, Any],
         source: str = "gei_core_observation",
-        ksi_enrichment_used: bool = False,
+        pai_enrichment_used: bool = False,
     ) -> Optional[Dict[str, Any]]:
         if not self.enabled:
             return None
@@ -215,8 +215,8 @@ class GEISidePathRecorder:
             self.coverage_delta_sum += _to_number(observation.get("coverage_delta"))
             if observation.get("revert") is True:
                 self.revert_count += 1
-            if ksi_enrichment_used:
-                self.ksi_enrichment_used = True
+            if pai_enrichment_used:
+                self.pai_enrichment_used = True
 
             candidate, meta = classify_side_path_candidate_with_meta(observation)
             self._record_filtered(meta)
@@ -255,8 +255,8 @@ class GEISidePathRecorder:
         shortlist_summary = shortlist_payload.get("summary") if isinstance(shortlist_payload, dict) else {}
         input_source = "disabled"
         if self.enabled:
-            if self.source_counts.get("legacy_ksi_record", 0) > 0 and self.source_counts.get("gei_core_observation", 0) == 0:
-                input_source = "legacy_ksi_record"
+            if self.source_counts.get("legacy_pai_record", 0) > 0 and self.source_counts.get("gei_core_observation", 0) == 0:
+                input_source = "legacy_pai_record"
             else:
                 input_source = self.default_input_source
         return {
@@ -264,8 +264,8 @@ class GEISidePathRecorder:
             "observation_count": int(self.observation_count),
             "side_path_candidate_count": int(self.total_candidates),
             "input_source": input_source,
-            "ksi_required": False,
-            "ksi_enrichment_used": bool(self.ksi_enrichment_used),
+            "pai_required": False,
+            "pai_enrichment_used": bool(self.pai_enrichment_used),
             "coverage_delta_sum": float(self.coverage_delta_sum),
             "revert_count": int(self.revert_count),
             "reason_counts": dict(self.reason_counts.most_common()),
@@ -353,24 +353,24 @@ class GEISidePathRecorder:
         }
 
 
-def build_gei_core_observation_from_legacy_ksi(ksi_record: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(ksi_record, dict):
+def build_gei_core_observation_from_legacy_pai(pai_record: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(pai_record, dict):
         return {}
 
-    observations = ksi_record.get("observations")
+    observations = pai_record.get("observations")
     if not isinstance(observations, dict):
         observations = {}
 
     function_names = _normalize_string_list(observations.get("functions"))
-    matched_prefix_len = _to_optional_int(ksi_record.get("matched_prefix_len"))
-    frontier = ksi_record.get("frontier")
-    sink_reached = _to_optional_bool(ksi_record.get("sink_reached"))
-    sink_function_reached = _to_optional_bool(ksi_record.get("sink_function_reached"))
-    sink_observed = _to_optional_bool(ksi_record.get("sink_observed"))
+    matched_prefix_len = _to_optional_int(pai_record.get("matched_prefix_len"))
+    frontier = pai_record.get("frontier")
+    sink_reached = _to_optional_bool(pai_record.get("sink_reached"))
+    sink_function_reached = _to_optional_bool(pai_record.get("sink_function_reached"))
+    sink_observed = _to_optional_bool(pai_record.get("sink_observed"))
 
     return {
-        "source": "legacy_ksi_record",
-        "sequence_id": str(ksi_record.get("sequence_id") or ""),
+        "source": "legacy_pai_record",
+        "sequence_id": str(pai_record.get("sequence_id") or ""),
         "function_names": function_names,
         "coverage_delta": _to_number(observations.get("coverage_delta")),
         "revert": observations.get("revert") is True,
@@ -399,8 +399,8 @@ def _classify_side_path_candidate(
     try:
         if not isinstance(observation, dict):
             return None, meta
-        if observation.get("source") == "legacy_ksi_record" or "observations" in observation:
-            observation = build_gei_core_observation_from_legacy_ksi(observation)
+        if observation.get("source") == "legacy_pai_record" or "observations" in observation:
+            observation = build_gei_core_observation_from_legacy_pai(observation)
 
         functions = _normalize_string_list(observation.get("function_names"))
         if not functions:

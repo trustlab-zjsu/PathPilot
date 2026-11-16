@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 
-class TFICandidateBuffer:
+class TCICandidateBuffer:
     def __init__(self, max_size: int = 64, max_per_round: int = 3, **_: Any) -> None:
         self.max_size = max(1, int(max_size or 1))
         self.max_per_round = max(1, int(max_per_round or 1))
@@ -42,4 +42,4 @@ class TFICandidateBuffer:
         return len(self._items)
 
 
-__all__ = ["TFICandidateBuffer"]
+__all__ = ["TCICandidateBuffer"]

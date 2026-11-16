@@ -299,7 +299,7 @@ class StateObligationBuilder:
             "missing_checkpoint_explanation": explanation if explanation and explanation.startswith("runtime:") else "",
             "failure_signature": failure_sig,
             "obligation_provenance": _dedup_text(
-                ["KSI_RUNTIME_EVIDENCE_DERIVED"]
+                ["PAI_RUNTIME_EVIDENCE_DERIVED"]
                 + (["STATIC_ANALYSIS_DERIVED"] if static_present else [])
                 + (["SOURCE_DERIVED"] if functions_reached else [])
             ),
